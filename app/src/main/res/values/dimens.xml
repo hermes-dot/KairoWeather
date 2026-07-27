@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 卡片 -->
+    <dimen name="card_padding_horizontal">12dp</dimen>
+    <dimen name="card_padding_vertical">12dp</dimen>
+    <dimen name="card_grid_spacing">8dp</dimen>
+    <dimen name="card_icon_size">32dp</dimen>
+    <dimen name="card_icon_size_small">24dp</dimen>
+    <dimen name="card_label_spacing">8dp</dimen>
+    <dimen name="card_value_spacing">4dp</dimen>
+
+    <!-- 页面 -->
+    <dimen name="page_horizontal_padding">16dp</dimen>
+    <dimen name="section_spacing">24dp</dimen>
+    <dimen name="main_icon_size">80dp</dimen>
+
+    <!-- 逐小时 -->
+    <dimen name="hourly_item_width">56dp</dimen>
+    <dimen name="hourly_item_spacing">8dp</dimen>
+    <dimen name="hourly_icon_size">28dp</dimen>
+</resources>
