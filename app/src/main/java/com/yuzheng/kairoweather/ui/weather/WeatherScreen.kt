@@ -7,9 +7,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -156,19 +158,29 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
             item(key = "details") {
                 Column(verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing))) {
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
-                        WindCard(weather.wind, weather.windAngle, weather.windSpeedRaw, weather.windScale, Modifier.weight(1f))
-                        HumidityCard(weather.humidity, Modifier.weight(1f))
+                        WindCard(
+                            weather.wind,
+                            weather.windAngle,
+                            weather.windSpeedRaw,
+                            weather.windScale,
+                            Modifier.weight(1f).fillMaxHeight(),
+                        )
+                        HumidityCard(weather.humidity, Modifier.weight(1f).fillMaxHeight())
                     }
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier
+                            .fillMaxWidth()
+                            .height(IntrinsicSize.Min),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
-                        PressureCard(weather.pressure, Modifier.weight(1f))
+                        PressureCard(weather.pressure, Modifier.weight(1f).fillMaxHeight())
                         dailyFirst?.let {
-                            UvIndexCard(it.uvIndex, Modifier.weight(1f))
+                            UvIndexCard(it.uvIndex, Modifier.weight(1f).fillMaxHeight())
                         }
                     }
                     dailyFirst?.moonPhase?.emoji?.let {

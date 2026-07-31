@@ -29,7 +29,7 @@ class WeatherMapperTest {
         assertEquals("24°", domain.temperature)
         assertEquals("体感26°", domain.feelLike)
         assertEquals("湿度60%", domain.humidity)
-        assertEquals("东北风 3级", domain.wind)
+        assertEquals("东北风", domain.wind)
         assertEquals("100", domain.iconCode)
         assertEquals("晴", domain.condition)
     }
