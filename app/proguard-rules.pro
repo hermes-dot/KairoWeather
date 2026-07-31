@@ -19,3 +19,23 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ── kotlinx.serialization ──
+# 保留序列化器及其描述符，开启混淆时保证反射仍可用
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.AnnotationsKt
+-keep,includedescriptorclasses class com.yuzheng.kairoweather.**$$serializer { *; }
+-keepclassmembers class com.yuzheng.kairoweather.** {
+    *** Companion;
+}
+-keepclasseswithmembers class com.yuzheng.kairoweather.** {
+    kotlinx.serialization.KSerializer serializer(...);
+}
+
+# ── Retrofit / OkHttp ──
+-dontwarn retrofit2.**
+-keep,allowobfuscation,allowshrinking interface retrofit2.Call
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+-keep,allowobfuscation,allowshrinking class kotlin.coroutines.Continuation
+-dontwarn okhttp3.**
+-dontwarn okio.**

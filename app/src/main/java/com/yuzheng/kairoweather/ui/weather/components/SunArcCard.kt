@@ -1,4 +1,4 @@
-package com.yuzheng.kairoweather.ui.theme.weather.components
+package com.yuzheng.kairoweather.ui.weather.components
 
 import android.graphics.Paint
 import android.graphics.Typeface
@@ -12,6 +12,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.R
@@ -36,7 +38,18 @@ fun SunArcCard(
         ) {
             Text("日出 & 日落", style = MaterialTheme.typography.titleMedium)
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
+
+            val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val trackColor = MaterialTheme.colorScheme.outline
+            val labelPaint = remember(labelColor) {
+                Paint().apply {
+                    isAntiAlias = true
+                    textSize = 34f
+                    color = labelColor.toArgb()
+                    typeface = Typeface.DEFAULT_BOLD
+                }
+            }
 
             Canvas(
                 modifier = Modifier
@@ -56,7 +69,7 @@ fun SunArcCard(
                 }
                 drawPath(
                     path = path,
-                    color = Color(0xFFAAAAAA),
+                    color = trackColor,
                     style = Stroke(
                         width = 2.5f,
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f)),
@@ -82,13 +95,6 @@ fun SunArcCard(
                 )
 
                 // ── 4. 标签 ──
-                val labelPaint = Paint().apply {
-                    isAntiAlias = true
-                    textSize = 34f
-                    color = 0xFF555555.toInt()
-                    typeface = Typeface.DEFAULT_BOLD
-                }
-
                 drawContext.canvas.nativeCanvas.drawText(
                     sunrise,
                     startX,

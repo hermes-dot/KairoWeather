@@ -11,24 +11,23 @@ import javax.inject.Singleton
 @Singleton
 class WeatherRepository @Inject constructor(private val api: WeatherApiService) {
 
-    suspend fun getCurrentWeather(location: String): Result<CurrentWeather> = runCatching {
+    suspend fun getCurrentWeather(location: String, unit: String): Result<CurrentWeather> = runCatching {
         val response = api.getCurrentWeather(location)
-        if (response.code != "200" || response.now == null) {
+        if (response.code != "200" || response.now == null)
             throw Exception("API error: code=${response.code}")
-        }
-        response.now.toDomain()
+        response.now.toDomain(unit)
     }
 
-    suspend fun getHourlyForecast(location: String): Result<List<HourlyForecast>> = runCatching {
+    suspend fun getHourlyForecast(location: String, unit: String): Result<List<HourlyForecast>> = runCatching {
         val response = api.getHourlyWeather(location = location)
         if (response.code != "200") throw Exception("API error: code=${response.code}")
-        response.hourly.map { it.toDomain() }
+        response.hourly.map { it.toDomain(unit) }
     }
 
-    suspend fun getDailyForecast(location: String): Result<List<DailyForecast>> = runCatching {
+    suspend fun getDailyForecast(location: String, unit: String): Result<List<DailyForecast>> = runCatching {
         val response = api.getDailyWeather(location = location)
         if (response.code != "200") throw Exception("API error: code=${response.code}")
-        response.daily.mapIndexed { i, d -> d.toDomain(i) }
+        response.daily.mapIndexed { i, d -> d.toDomain(i, unit) }
     }
 
     suspend fun reverseGeocode(location: String): Result<String> = runCatching {

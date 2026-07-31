@@ -1,6 +1,5 @@
 package com.yuzheng.kairoweather.data.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable

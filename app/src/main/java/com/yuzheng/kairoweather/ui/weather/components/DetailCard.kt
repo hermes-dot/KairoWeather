@@ -1,4 +1,4 @@
-package com.yuzheng.kairoweather.ui.theme.weather.components
+package com.yuzheng.kairoweather.ui.weather.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +54,11 @@ fun WindCard(
 
             Text(direction, style = MaterialTheme.typography.titleMedium)
 
+            Text(
+                text = "${scale}级 · ${speed}km/h",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

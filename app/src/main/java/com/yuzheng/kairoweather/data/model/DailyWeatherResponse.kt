@@ -1,6 +1,5 @@
 package com.yuzheng.kairoweather.data.model
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -35,5 +34,6 @@ data class QWeatherDaily(
     val pressure: String = "0",
     val vis: String = "0",
     val cloud: String = "0",
-    val uvIndex: String = "0"
+    val uvIndex: String = "0",
+    val pop: String = "0",
 )

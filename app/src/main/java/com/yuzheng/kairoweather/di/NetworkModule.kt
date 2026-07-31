@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.di
 
+import com.yuzheng.kairoweather.BuildConfig
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.yuzheng.kairoweather.remote.WeatherApiService
 import dagger.Module
@@ -18,20 +19,26 @@ import java.util.concurrent.TimeUnit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    // 去 https://console.qweather.com/setting 复制你的个人 API Host（格式：xxxx.yyy.qweatherapi.com）
-    private const val BASE_URL = "https://kg7aatk793.re.qweatherapi.com/"
+    private val BASE_URL: String = BuildConfig.QWEATHER_BASE_URL
+        .ifEmpty { error("请在项目根目录的 qweather.properties 中配置 baseUrl（https://console.qweather.com/setting 获取）") }
+    private val API_KEY: String = BuildConfig.QWEATHER_API_KEY
+        .ifEmpty { error("请在项目根目录的 qweather.properties 中配置 apiKey（https://console.qweather.com 获取）") }
 
-    // 在 https://console.qweather.com 创建 API KEY
-    private const val API_KEY = "<your-q…i-key>"
+    private val json = Json { ignoreUnknownKeys = true }
 
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
+        .apply {
+            // 仅 Debug 构建打印请求/响应日志，Release 不输出敏感信息
+            if (BuildConfig.DEBUG) {
+                addInterceptor(HttpLoggingInterceptor().apply {
+                    level = HttpLoggingInterceptor.Level.BODY
+                })
+            }
+        }
         .addInterceptor { chain ->
             chain.proceed(
                 chain.request().newBuilder()
@@ -40,8 +47,6 @@ object NetworkModule {
             )
         }
         .build()
-
-    private val json = Json { ignoreUnknownKeys = true }
 
     @Provides
     @Singleton

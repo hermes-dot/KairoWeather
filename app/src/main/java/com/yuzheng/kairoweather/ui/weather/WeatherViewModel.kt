@@ -1,8 +1,9 @@
-package com.yuzheng.kairoweather.ui.theme.weather
+package com.yuzheng.kairoweather.ui.weather
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yuzheng.kairoweather.data.location.LocationTracker
+import com.yuzheng.kairoweather.data.preferences.UserPreferences
 import com.yuzheng.kairoweather.data.repository.WeatherRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.coroutineScope
@@ -18,11 +19,27 @@ import javax.inject.Inject
 class WeatherViewModel @Inject constructor(
     private val repository: WeatherRepository,
     private val locationTracker: LocationTracker,
+    preferences: UserPreferences,
 ) : ViewModel() {
+    companion object {
+        /** 默认城市坐标（北京），权限被拒绝或定位失败时使用 */
+        const val DEFAULT_LOCATION = "116.41,39.92"
+    }
+
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
 
-    private var lastLocation: String = "116.41,39.92"
+    private var lastLocation: String = DEFAULT_LOCATION
+
+    init {
+        viewModelScope.launch {
+            preferences.temperatureUnit.collect { unit ->
+                _uiState.update { it.copy(temperatureUnit = unit) }
+            }
+        }
+    }
+
+    private val currentUnit: String get() = _uiState.value.temperatureUnit
 
     fun loadFromCurrentLocation() {
         if (_uiState.value.isLoading) return
@@ -36,14 +53,12 @@ class WeatherViewModel @Inject constructor(
                     loadWeatherInternal(coords)
                 }
                 .onFailure {
-                    _uiState.update { s -> s.copy(isLoading = false, error = "定位失败：${it.message}") }
+                    // 定位失败时回退到默认城市，保证页面可用
+                    lastLocation = DEFAULT_LOCATION
+                    resolveLocationName(DEFAULT_LOCATION)
+                    loadWeatherInternal(DEFAULT_LOCATION)
                 }
         }
-    }
-
-    private suspend fun resolveLocationName(coords: String) {
-        repository.reverseGeocode(coords)
-            .onSuccess { name -> _uiState.update { it.copy(locationName = name) } }
     }
 
     fun loadingWeather(location: String) {
@@ -55,43 +70,50 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    fun refresh() {
-        loadingWeather(lastLocation)
+    fun refresh() = loadingWeather(lastLocation)
+
+    private suspend fun resolveLocationName(coords: String) {
+        repository.reverseGeocode(coords)
+            .onSuccess { name -> _uiState.update { it.copy(locationName = name) } }
     }
 
     private suspend fun loadWeatherInternal(location: String) = coroutineScope {
-        val currentJob = launch { loadCurrent(location) }
-        val hourlyJob = launch { loadHourly(location) }
-        val dailyJob = launch { loadDaily(location) }
+        val unit = currentUnit
+        val currentJob = launch { loadCurrent(location, unit) }
+        val hourlyJob = launch { loadHourly(location, unit) }
+        val dailyJob = launch { loadDaily(location, unit) }
 
-        currentJob.join()
-        hourlyJob.join()
-        dailyJob.join()
-
+        currentJob.join(); hourlyJob.join(); dailyJob.join()
         _uiState.update { it.copy(isLoading = false) }
     }
 
-    private suspend fun loadCurrent(location: String) {
-        repository.getCurrentWeather(location)
+    private suspend fun loadCurrent(location: String, unit: String) {
+        repository.getCurrentWeather(location, unit)
             .onSuccess { _uiState.update { s -> s.copy(current = it) } }
             .onFailure { _uiState.update { s -> s.copy(error = it.message) } }
     }
 
-    private suspend fun loadHourly(location: String) {
-        repository.getHourlyForecast(location)
-            .onSuccess { _uiState.update { s -> s.copy(hourly = it) } }
+    private suspend fun loadHourly(location: String, unit: String) {
+        repository.getHourlyForecast(location, unit)
+            .onSuccess { hours ->
+                val currentHour = LocalTime.now().hour
+                _uiState.update { s ->
+                    s.copy(
+                        hourly = hours.map { hour ->
+                            hour.copy(isNow = hour.time.take(2).toIntOrNull() == currentHour)
+                        }
+                    )
+                }
+            }
     }
 
-    private suspend fun loadDaily(location: String) {
-        repository.getDailyForecast(location)
+    private suspend fun loadDaily(location: String, unit: String) {
+        repository.getDailyForecast(location, unit)
             .onSuccess { days ->
                 _uiState.update { s ->
                     s.copy(
                         daily = days,
-                        sunProgress = calcSunProgress(
-                            days.firstOrNull()?.sunrise,
-                            days.firstOrNull()?.sunset
-                        )
+                        sunProgress = calcSunProgress(days.firstOrNull()?.sunrise, days.firstOrNull()?.sunset)
                     )
                 }
             }

@@ -4,28 +4,29 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.getValue
+import com.yuzheng.kairoweather.data.preferences.UserPreferences
+import com.yuzheng.kairoweather.ui.navigation.MainScreen
 import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
-import com.yuzheng.kairoweather.ui.theme.weather.WeatherScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject
+    lateinit var preferences: UserPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            KairoWeatherTheme {
-                WeatherScreen()
-            }
 
+        setContent {
+            val themeMode by preferences.themeMode.collectAsStateWithLifecycle(initialValue = "system")
+            KairoWeatherTheme(themeMode = themeMode) {
+                MainScreen()
+            }
         }
     }
 }
-
