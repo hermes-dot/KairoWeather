@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -45,6 +48,7 @@ import com.yuzheng.kairoweather.ui.weather.components.UvIndexCard
 import com.yuzheng.kairoweather.ui.weather.components.WeatherHeader
 import com.yuzheng.kairoweather.ui.weather.components.WeatherTopBar
 import com.yuzheng.kairoweather.ui.weather.components.WindCard
+import com.yuzheng.kairoweather.ui.theme.weatherSkyGradient
 
 @Composable
 fun WeatherScreen(
@@ -76,7 +80,12 @@ fun WeatherScreen(
         }
     }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Brush.verticalGradient(weatherSkyGradient())),
+        color = Color.Transparent,
+    ) {
         when {
             state.isLoading && state.current == null -> LoadingContent()
             state.error != null && state.current == null ->
