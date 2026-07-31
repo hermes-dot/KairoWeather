@@ -1,4 +1,4 @@
-package com.yuzheng.kairoweather.ui.theme.weather.components
+package com.yuzheng.kairoweather.ui.weather.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,9 +12,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.yuzheng.kairoweather.R
 
 @Composable
 fun WeatherHeader(
@@ -31,7 +32,7 @@ fun WeatherHeader(
         Icon(
             imageVector = qWeatherIcon(iconCode),
             contentDescription = condition,
-            modifier = Modifier.size(80.dp),
+            modifier = Modifier.size(dimensionResource(R.dimen.main_icon_size)),
             tint = MaterialTheme.colorScheme.primary,
         )
 

@@ -1,9 +1,11 @@
-package com.yuzheng.kairoweather.ui.theme.weather.components
+package com.yuzheng.kairoweather.ui.weather.components
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,7 +42,18 @@ fun DailyForecastList(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(day.highTemp, style = MaterialTheme.typography.bodyMedium)
+                if (day.pop != "0%") {
+                    Text(
+                        day.pop,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    "${day.lowTemp} / ${day.highTemp}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }

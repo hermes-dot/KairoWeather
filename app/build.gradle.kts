@@ -1,3 +1,14 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+// 从本地 qweather.properties 读取 API 配置（已被 .gitignore 忽略，不进入版本库）
+val qweatherProperties = Properties().apply {
+    val configFile = rootProject.file("qweather.properties")
+    if (configFile.exists()) {
+        FileInputStream(configFile).use { load(it) }
+    }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -21,6 +32,17 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        buildConfigField(
+            "String",
+            "QWEATHER_API_KEY",
+            "\"${qweatherProperties.getProperty("apiKey", "")}\"",
+        )
+        buildConfigField(
+            "String",
+            "QWEATHER_BASE_URL",
+            "\"${qweatherProperties.getProperty("baseUrl", "")}\"",
+        )
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -39,6 +61,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -48,8 +71,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.converter)
-// Retrofit with Scalar Converter
-    implementation(libs.converter.scalars)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -59,12 +80,8 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     // Material Icons
-    implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.compose.material.icons.extended)
-    // implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.kotlinx.serialization.json)
-    // Coil
-    implementation(libs.coil.compose)
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
@@ -73,6 +90,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     // Location
     implementation(libs.play.services.location)
+    // Navigation
+    implementation(libs.androidx.navigation.compose)
+    // DataStore
+    implementation(libs.androidx.datastore.preferences)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -1,4 +1,4 @@
-package com.yuzheng.kairoweather.ui.theme.weather.components
+package com.yuzheng.kairoweather.ui.weather.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
