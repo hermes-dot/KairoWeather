@@ -1,18 +1,19 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Card
@@ -24,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
@@ -35,12 +35,11 @@ fun HourlyForecastRow(
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier) {
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Spacer(Modifier.width(12.dp))
-            items.forEachIndexed { index, hour ->
+            itemsIndexed(items, key = { _, hour -> hour.time }) { index, hour ->
                 HourlyItem(hour, Modifier.width(64.dp))
                 if (index < items.lastIndex) {
                     VerticalDivider(
@@ -49,7 +48,6 @@ fun HourlyForecastRow(
                     )
                 }
             }
-            Spacer(Modifier.width(12.dp))
         }
     }
 }
@@ -78,14 +76,16 @@ private fun HourlyItem(
 
         Spacer(Modifier.height(6.dp))
 
-        Box(
-            modifier = Modifier
+        val pillModifier = if (isNow) {
+            Modifier
                 .size(32.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(
-                    if (isNow) MaterialTheme.colorScheme.primaryContainer
-                    else Color.Transparent
-                ),
+                .background(MaterialTheme.colorScheme.primaryContainer)
+        } else {
+            Modifier.size(32.dp)
+        }
+        Box(
+            modifier = pillModifier,
             contentAlignment = Alignment.Center,
         ) {
             Icon(
