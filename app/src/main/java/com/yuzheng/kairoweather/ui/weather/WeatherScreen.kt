@@ -155,6 +155,19 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                 )
             }
 
+            // ── 逐小时 ──
+            if (state.hourly.isNotEmpty()) {
+                item(key = "spacer_hourly_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
+                item(key = "hourly_title") {
+                    Text(
+                        "逐小时预报", style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = dimensionResource(R.dimen.page_horizontal_padding)),
+                    )
+                }
+                item(key = "spacer_hourly_mid") { Spacer(Modifier.height(8.dp)) }
+                item(key = "hourly") { HourlyForecastRow(state.hourly) }
+            }
+
             // ── 逐日预报 ──
             if (state.daily.isNotEmpty()) {
                 item(key = "spacer_daily_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
@@ -208,19 +221,6 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                 item(key = "sun") {
                     SunArcCard(dailyFirst.sunrise, dailyFirst.sunset, state.sunProgress, Modifier.fillMaxWidth())
                 }
-            }
-
-            // ── 逐小时 ──
-            if (state.hourly.isNotEmpty()) {
-                item(key = "spacer_hourly_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
-                item(key = "hourly_title") {
-                    Text(
-                        "逐小时预报", style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = dimensionResource(R.dimen.page_horizontal_padding)),
-                    )
-                }
-                item(key = "spacer_hourly_mid") { Spacer(Modifier.height(8.dp)) }
-                item(key = "hourly") { HourlyForecastRow(state.hourly) }
             }
 
             item(key = "spacer_bottom") { Spacer(Modifier.height(32.dp)) }
