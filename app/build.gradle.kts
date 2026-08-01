@@ -48,7 +48,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // P2-13: 开启 R8 压缩与混淆,提高 API Key 从包中提取的难度(配合
+            // proguard-rules.pro 中 Compose/Hilt/Retrofit/kotlinx-serialization 的 keep 规则)。
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -63,14 +65,21 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests {
+            // Robolectric 需要 Android 资源/上下文来支撑 DataStore 测试
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 dependencies {
     // Retrofit
     implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.kotlinx.serialization)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    implementation(libs.kotlinx.serialization.converter)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -95,6 +104,9 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
     testImplementation(libs.junit)
+    testImplementation("io.mockk:mockk:1.14.9")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.robolectric:robolectric:4.16.1")
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
