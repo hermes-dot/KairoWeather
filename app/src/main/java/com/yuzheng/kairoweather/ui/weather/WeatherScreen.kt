@@ -180,9 +180,7 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
             item(key = "details") {
                 Column(verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing))) {
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
                         WindCard(
@@ -190,19 +188,17 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                             weather.windAngle,
                             weather.windSpeedRaw,
                             weather.windScale,
-                            Modifier.weight(1f).fillMaxHeight(),
+                            Modifier.weight(1f).height(120.dp),
                         )
-                        HumidityCard(weather.humidity, Modifier.weight(1f).fillMaxHeight())
+                        HumidityCard(weather.humidity, Modifier.weight(1f).height(120.dp))
                     }
                     Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(IntrinsicSize.Min),
+                        Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
-                        PressureCard(weather.pressure, Modifier.weight(1f).fillMaxHeight())
+                        PressureCard(weather.pressure, Modifier.weight(1f).height(120.dp))
                         dailyFirst?.let {
-                            UvIndexCard(it.uvIndex, Modifier.weight(1f).fillMaxHeight())
+                            UvIndexCard(it.uvIndex, Modifier.weight(1f).height(120.dp))
                         }
                     }
                     dailyFirst?.moonPhase?.emoji?.let {
