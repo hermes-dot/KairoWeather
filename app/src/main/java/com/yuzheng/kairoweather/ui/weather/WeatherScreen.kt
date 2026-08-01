@@ -8,11 +8,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -27,6 +25,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -67,7 +68,13 @@ fun WeatherScreen(
         }
     }
 
+    // P1-3 / P2-C2: 用 rememberSaveable 记录"本组合实例是否已初始化"。
+    // 旋转或导航返回重建时跳过定位/权限流程,权限被拒后置位,不再重复弹窗。
+    var isInitialized by rememberSaveable { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
+        if (isInitialized) return@LaunchedEffect
+        isInitialized = true
         if (hasLocationPermission(context)) {
             viewModel.loadFromCurrentLocation()
         } else {
@@ -91,6 +98,8 @@ fun WeatherScreen(
             state.error != null && state.current == null ->
                 ErrorContent(state.error!!, onRetry = { viewModel.refresh() })
             state.current != null -> WeatherContent(state, onRefresh = { viewModel.refresh() })
+            // P2-8: 初始 state(current==null && !isLoading && error==null)时的首帧兜底,避免空白闪帧
+            else -> LoadingContent()
         }
     }
 }
@@ -149,9 +158,10 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
             item(key = "header") {
                 WeatherHeader(
                     iconCode = weather.iconCode,
-                    temperature = weather.temperature,
+                    tempCelsius = weather.tempCelsius,
                     condition = weather.condition,
-                    feelLike = weather.feelLike,
+                    feelsLikeCelsius = weather.feelsLikeCelsius,
+                    unit = state.temperatureUnit,
                 )
             }
 
@@ -165,13 +175,13 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                     )
                 }
                 item(key = "spacer_hourly_mid") { Spacer(Modifier.height(8.dp)) }
-                item(key = "hourly") { HourlyForecastRow(state.hourly) }
+                item(key = "hourly") { HourlyForecastRow(state.hourly, state.temperatureUnit) }
             }
 
             // ── 逐日预报 ──
             if (state.daily.isNotEmpty()) {
                 item(key = "spacer_daily_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
-                item(key = "daily") { DailyForecastList(state.daily) }
+                item(key = "daily") { DailyForecastList(state.daily, state.temperatureUnit) }
             }
 
             item(key = "spacer_detail_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
@@ -179,6 +189,8 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
             // ── 详情卡片网格 (2列) ──
             item(key = "details") {
                 Column(verticalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing))) {
+                    // P2-C3: 去掉 IntrinsicSize.Min + fillMaxHeight(避免两轮 intrinsic 测量),
+                    // 改为每张卡片固定高度 160.dp,同排两列视觉对齐且内容不溢出。
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
@@ -190,15 +202,15 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                             weather.windScale,
                             Modifier.weight(1f).height(120.dp),
                         )
-                        HumidityCard(weather.humidity, Modifier.weight(1f).height(120.dp))
+                        HumidityCard(weather.humidityPct, Modifier.weight(1f).height(120.dp))
                     }
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
-                        PressureCard(weather.pressure, Modifier.weight(1f).height(120.dp))
+                        PressureCard(weather.pressureHpa, Modifier.weight(1f).height(120.dp))
                         dailyFirst?.let {
-                            UvIndexCard(it.uvIndex, Modifier.weight(1f).height(120.dp))
+                            UvIndexCard(it.uvIndexValue, Modifier.weight(1f).height(120.dp))
                         }
                     }
                     dailyFirst?.moonPhase?.emoji?.let {

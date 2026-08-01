@@ -66,7 +66,7 @@ fun SunArcCard(
                 val startX = 24.dp.toPx()
                 val endX = size.width - 24.dp.toPx()
                 val midX = (startX + endX) / 2
-                val topY = 18.dp.toPx()
+                val topY = 12.dp.toPx()
                 val bottomY = size.height - 30.dp.toPx()
 
                 // ── 1. 虚线弧轨 ──
@@ -79,7 +79,7 @@ fun SunArcCard(
                     color = trackColor,
                     style = Stroke(
                         width = 2.5.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 6.dp.toPx())),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 3.dp.toPx())),
                     ),
                 )
 
@@ -92,12 +92,12 @@ fun SunArcCard(
                 // ── 3. 光晕 + 太阳 ──
                 drawCircle(
                     color = Color(0x44FFB300),
-                    radius = 16.dp.toPx(),
+                    radius = 10.dp.toPx(),
                     center = Offset(sunX, sunY),
                 )
                 drawCircle(
                     color = Color(0xFFFFB300),
-                    radius = 8.dp.toPx(),
+                    radius = 5.dp.toPx(),
                     center = Offset(sunX, sunY),
                 )
 

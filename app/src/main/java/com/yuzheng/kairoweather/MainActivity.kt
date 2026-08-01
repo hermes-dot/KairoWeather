@@ -5,12 +5,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import com.yuzheng.kairoweather.data.preferences.UserPreferences
+import com.yuzheng.kairoweather.domain.model.ThemeMode
 import com.yuzheng.kairoweather.ui.navigation.MainScreen
 import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.flow.first
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -23,7 +25,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            val themeMode by preferences.themeMode.collectAsStateWithLifecycle(initialValue = "system")
+            // P2-C7: produceState 挂起首帧直到 DataStore 出值,避免首帧按 "system" 闪变;
+            // 主题已枚举化(批次C),ThemeMode.SYSTEM 仅作读取前的初始占位。
+            val themeMode by produceState(initialValue = ThemeMode.SYSTEM) {
+                value = preferences.themeMode.first()
+            }
             KairoWeatherTheme(themeMode = themeMode) {
                 MainScreen()
             }

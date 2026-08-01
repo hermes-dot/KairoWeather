@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
+import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +22,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.R
+import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
 
 @Composable
 fun WindCard(
@@ -67,7 +71,7 @@ fun WindCard(
 
 @Composable
 fun HumidityCard(
-    humidity: String,
+    humidityPct: Int,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier) {
@@ -91,14 +95,14 @@ fun HumidityCard(
 
             Spacer(Modifier.height(dimensionResource(R.dimen.card_value_spacing)))
 
-            Text("${humidity}", style = MaterialTheme.typography.titleMedium)
+            Text("$humidityPct%", style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
 @Composable
 fun PressureCard(
-    pressure: String,
+    pressureHpa: Int,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier) {
@@ -122,14 +126,14 @@ fun PressureCard(
 
             Spacer(Modifier.height(dimensionResource(R.dimen.card_value_spacing)))
 
-            Text(pressure, style = MaterialTheme.typography.titleMedium)
+            Text("${pressureHpa}hPa", style = MaterialTheme.typography.titleMedium)
         }
     }
 }
 
 @Composable
 fun UvIndexCard(
-    uvIndex: String,
+    uvIndex: Int,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier) {
@@ -182,5 +186,35 @@ fun MoonPhaseCard(
 
             Text(phaseName, style = MaterialTheme.typography.titleMedium)
         }
+    }
+}
+
+// ── Preview ──
+
+@Preview(name = "WindCard - Light", showBackground = true)
+@Composable
+private fun WindCardPreview() {
+    KairoWeatherTheme {
+        WindCard(
+            direction = "东北风",
+            angle = "45",
+            speed = "10",
+            scale = "3",
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        )
+    }
+}
+
+@Preview(name = "WindCard - Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun WindCardDarkPreview() {
+    KairoWeatherTheme {
+        WindCard(
+            direction = "西北风",
+            angle = "315",
+            speed = "12",
+            scale = "4",
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+        )
     }
 }

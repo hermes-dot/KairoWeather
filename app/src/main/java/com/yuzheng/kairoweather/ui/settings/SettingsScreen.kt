@@ -27,6 +27,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yuzheng.kairoweather.domain.model.TemperatureUnit
+import com.yuzheng.kairoweather.domain.model.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,17 +58,17 @@ fun SettingsScreen(
             // ── 温度单位 ──
             Text("温度单位", style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(16.dp, 16.dp, 16.dp, 8.dp))
-            OptionRow("摄氏度 (°C)", state.temperatureUnit == "celsius", onClick = { viewModel.setTemperatureUnit("celsius") })
-            OptionRow("华氏度 (°F)", state.temperatureUnit == "fahrenheit", onClick = { viewModel.setTemperatureUnit("fahrenheit") })
+            OptionRow("摄氏度 (°C)", state.temperatureUnit == TemperatureUnit.CELSIUS, onClick = { viewModel.setTemperatureUnit(TemperatureUnit.CELSIUS) })
+            OptionRow("华氏度 (°F)", state.temperatureUnit == TemperatureUnit.FAHRENHEIT, onClick = { viewModel.setTemperatureUnit(TemperatureUnit.FAHRENHEIT) })
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
 
             // ── 主题模式 ──
             Text("主题模式", style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.padding(16.dp, 8.dp, 16.dp, 8.dp))
-            OptionRow("跟随系统", state.themeMode == "system", onClick = { viewModel.setThemeMode("system") })
-            OptionRow("浅色", state.themeMode == "light", onClick = { viewModel.setThemeMode("light") })
-            OptionRow("深色", state.themeMode == "dark", onClick = { viewModel.setThemeMode("dark") })
+            OptionRow("跟随系统", state.themeMode == ThemeMode.SYSTEM, onClick = { viewModel.setThemeMode(ThemeMode.SYSTEM) })
+            OptionRow("浅色", state.themeMode == ThemeMode.LIGHT, onClick = { viewModel.setThemeMode(ThemeMode.LIGHT) })
+            OptionRow("深色", state.themeMode == ThemeMode.DARK, onClick = { viewModel.setThemeMode(ThemeMode.DARK) })
         }
     }
 }
