@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ fun WindCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(dimensionResource(R.dimen.card_padding_horizontal)),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("风向风力", style = MaterialTheme.typography.labelMedium)
@@ -73,6 +75,7 @@ fun HumidityCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(dimensionResource(R.dimen.card_padding_horizontal)),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("湿度", style = MaterialTheme.typography.labelMedium)
@@ -103,6 +106,7 @@ fun PressureCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(dimensionResource(R.dimen.card_padding_horizontal)),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("气压", style = MaterialTheme.typography.labelMedium)
@@ -133,6 +137,7 @@ fun UvIndexCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(dimensionResource(R.dimen.card_padding_horizontal)),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("紫外线", style = MaterialTheme.typography.labelMedium)
@@ -164,6 +169,7 @@ fun MoonPhaseCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(dimensionResource(R.dimen.card_padding_horizontal)),
+            verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text("月相", style = MaterialTheme.typography.labelMedium)

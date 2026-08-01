@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
+import android.content.res.Configuration
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
@@ -21,9 +22,12 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.dimensionResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.R
+import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
 
 @Composable
 fun SunArcCard(
@@ -42,10 +46,12 @@ fun SunArcCard(
 
             val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
             val trackColor = MaterialTheme.colorScheme.outline
-            val labelPaint = remember(labelColor) {
+            // P2-C4: 文字尺寸用 LocalDensity 把 dp 换算成像素,避免高密度屏上偏小
+            val labelTextSize = with(LocalDensity.current) { 13.dp.toPx() }
+            val labelPaint = remember(labelColor, labelTextSize) {
                 Paint().apply {
                     isAntiAlias = true
-                    textSize = 34f
+                    textSize = labelTextSize
                     color = labelColor.toArgb()
                     typeface = Typeface.DEFAULT_BOLD
                 }
@@ -54,13 +60,14 @@ fun SunArcCard(
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(150.dp)
             ) {
-                val startX = 50f
-                val endX = size.width - 50f
+                // P2-C4: DrawScope 实现 Density,坐标/半径/线宽统一用 dp.toPx() 换算,适配高密度屏
+                val startX = 24.dp.toPx()
+                val endX = size.width - 24.dp.toPx()
                 val midX = (startX + endX) / 2
-                val topY = 20f
-                val bottomY = size.height - 36f
+                val topY = 18.dp.toPx()
+                val bottomY = size.height - 30.dp.toPx()
 
                 // ── 1. 虚线弧轨 ──
                 val path = Path().apply {
@@ -71,8 +78,8 @@ fun SunArcCard(
                     path = path,
                     color = trackColor,
                     style = Stroke(
-                        width = 2.5f,
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f)),
+                        width = 2.5.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(10.dp.toPx(), 6.dp.toPx())),
                     ),
                 )
 
@@ -85,12 +92,12 @@ fun SunArcCard(
                 // ── 3. 光晕 + 太阳 ──
                 drawCircle(
                     color = Color(0x44FFB300),
-                    radius = 26f,
+                    radius = 16.dp.toPx(),
                     center = Offset(sunX, sunY),
                 )
                 drawCircle(
                     color = Color(0xFFFFB300),
-                    radius = 14f,
+                    radius = 8.dp.toPx(),
                     center = Offset(sunX, sunY),
                 )
 
@@ -98,16 +105,44 @@ fun SunArcCard(
                 drawContext.canvas.nativeCanvas.drawText(
                     sunrise,
                     startX,
-                    bottomY + 28f,
+                    bottomY + 18.dp.toPx(),
                     labelPaint.apply { textAlign = Paint.Align.LEFT },
                 )
                 drawContext.canvas.nativeCanvas.drawText(
                     sunset,
                     endX,
-                    bottomY + 28f,
+                    bottomY + 18.dp.toPx(),
                     labelPaint.apply { textAlign = Paint.Align.RIGHT },
                 )
             }
         }
+    }
+}
+
+// ── Preview ──
+
+@Preview(name = "SunArcCard - Light", showBackground = true)
+@Composable
+private fun SunArcCardPreview() {
+    KairoWeatherTheme {
+        SunArcCard(
+            sunrise = "05:00",
+            sunset = "19:00",
+            progress = 0.5f,
+            modifier = Modifier.padding(16.dp),
+        )
+    }
+}
+
+@Preview(name = "SunArcCard - Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun SunArcCardDarkPreview() {
+    KairoWeatherTheme {
+        SunArcCard(
+            sunrise = "06:12",
+            sunset = "18:35",
+            progress = 0.25f,
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }
