@@ -8,61 +8,56 @@ import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
 import com.yuzheng.kairoweather.domain.model.MoonPhase
 
-fun QWeatherNow.toDomain(unit: String): CurrentWeather = CurrentWeather(
-    temperature = formatTemp(temp, unit),
+/**
+ * DTO → domain 转换:只做数值解析,不做单位换算与文案格式化。
+ * 温度/百分比/气压/紫外线均以原始数值存入 domain 模型,单位与文案由 UI 层按 TemperatureUnit 处理。
+ */
+fun QWeatherNow.toDomain(): CurrentWeather = CurrentWeather(
+    tempCelsius = temp.toDoubleOrNull() ?: 0.0,
     condition = text,
-    feelLike = "体感${formatTemp(feelsLike, unit)}",
-    humidity = "湿度$humidity%",
+    feelsLikeCelsius = feelsLike.toDoubleOrNull() ?: 0.0,
+    humidityPct = humidity.toIntOrNull() ?: 0,
     wind = windDir,
     windAngle = wind360,
     windSpeedRaw = windSpeed,
     windScale = windScale,
     iconCode = icon,
-    pressure = "气压${pressure}hPa"
+    pressureHpa = pressure.toIntOrNull() ?: 0
 )
 
-fun QWeatherHourly.toDomain(unit: String): HourlyForecast {
+fun QWeatherHourly.toDomain(): HourlyForecast {
     val time = fxTime.substringAfter("T").substringBefore("+")
     return HourlyForecast(
         time = time,
-        temperature = formatTemp(temp, unit),
+        tempCelsius = temp.toDoubleOrNull() ?: 0.0,
         iconCode = icon,
-        pop = "${pop}%",
-        isNow = false
+        popPct = pop.toIntOrNull() ?: 0,
+        isNow = false,
+        rawTime = fxTime
     )
 }
 
-fun QWeatherDaily.toDomain(index: Int, unit: String): DailyForecast = DailyForecast(
+fun QWeatherDaily.toDomain(index: Int): DailyForecast = DailyForecast(
     date = if (index == 0) "今天" else formatFxDate(fxDate),
-    highTemp = formatTemp(tempMax, unit),
-    lowTemp = formatTemp(tempMin, unit),
+    highTempCelsius = tempMax.toDoubleOrNull() ?: 0.0,
+    lowTempCelsius = tempMin.toDoubleOrNull() ?: 0.0,
     iconCode = iconDay,
     description = textDay,
-    pop = formatPop(pop),
-    uvIndex = uvIndex,
+    // 原 formatPop 语义:负数归零,保留"无降水概率不展示"的判断依据(popPct == 0)
+    popPct = pop.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+    uvIndexValue = uvIndex.toIntOrNull() ?: 0,
     moonPhase = moonPhase.toMoonPhase(),
     sunrise = sunrise,
     sunset = sunset
 )
 
-internal fun formatTemp(celsiusStr: String, unit: String): String {
-    val celsius = celsiusStr.toDoubleOrNull() ?: return "$celsiusStr°"
-    return if (unit == "fahrenheit") {
-        "${(celsius * 9 / 5 + 32).toInt()}°"
-    } else {
-        "${celsius.toInt()}°"
-    }
-}
-
 internal fun formatFxDate(fxDate: String): String {
     if (fxDate.length < 10) return fxDate
+    // 防御非法格式:如 "2026-08-01T00:00"、"2026-08"、"2026-13-40" 等,原样返回而非抛异常
+    val date = runCatching { java.time.LocalDate.parse(fxDate) }.getOrNull() ?: return fxDate
     val week = listOf("周日", "周一", "周二", "周三", "周四", "周五", "周六")
-    val parts = fxDate.split("-")
-    val year = parts[0].toInt()
-    val month = parts[1].toInt()
-    val day = parts[2].toInt()
-    val dayOfWeek = java.time.LocalDate.of(year, month, day).dayOfWeek.value % 7
-    return "${week[dayOfWeek]} $month/$day"
+    val dayOfWeek = date.dayOfWeek.value % 7
+    return "${week[dayOfWeek]} ${date.monthValue}/${date.dayOfMonth}"
 }
 
 internal fun String.toMoonPhase(): MoonPhase = when (this) {
@@ -75,9 +70,4 @@ internal fun String.toMoonPhase(): MoonPhase = when (this) {
     "下弦月" -> MoonPhase.LAST_QUARTER
     "残月" -> MoonPhase.WANING_CRESCENT
     else -> MoonPhase.NEW_MOON
-}
-
-private fun formatPop(pop: String): String {
-    val value = pop.toIntOrNull() ?: return "0%"
-    return if (value > 0) "$value%" else "0%"
 }
