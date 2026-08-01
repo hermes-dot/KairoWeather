@@ -22,6 +22,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -81,9 +82,10 @@ class WeatherViewModelTest {
     }
 
     private fun stubWeatherSuccess() {
-        coEvery { repository.getCurrentWeather(any()) } returns Result.success(current)
-        coEvery { repository.getHourlyForecast(any()) } returns Result.success(hourly)
-        coEvery { repository.getDailyForecast(any()) } returns Result.success(daily)
+        // 签名含 forceRefresh,用 any(), any() 让普通加载与强制刷新两种路径都命中
+        coEvery { repository.getCurrentWeather(any(), any()) } returns Result.success(current)
+        coEvery { repository.getHourlyForecast(any(), any()) } returns Result.success(hourly)
+        coEvery { repository.getDailyForecast(any(), any()) } returns Result.success(daily)
     }
 
     /** loadingWeather 会并行反查地名,测试需为 reverseGeocode 打桩 */
@@ -175,11 +177,11 @@ class WeatherViewModelTest {
                 repository.getDailyForecast(WeatherViewModel.DEFAULT_LOCATION)
             }
 
-            // refresh 复用回退后的默认城市
+            // refresh 复用回退后的默认城市(forceRefresh = true 走强制刷新路径)
             vm.refresh()
             advanceUntilIdle()
             coVerify(exactly = 2) {
-                repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION)
+                repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION, any())
             }
         }
 
@@ -212,7 +214,45 @@ class WeatherViewModelTest {
 
             vm.refresh()
             advanceUntilIdle()
-            coVerify(exactly = 2) { repository.getCurrentWeather("1.00,2.00") }
+            // 首次加载(force=false) + 刷新(force=true) 各一次
+            coVerify(exactly = 2) { repository.getCurrentWeather("1.00,2.00", any()) }
+        }
+
+    @Test
+    fun `refresh forces network and keeps indicator for min duration`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            // gate 控制 current 请求返回时机,验证刷新期间 isLoading 持续为 true
+            val gate = CompletableDeferred<Result<CurrentWeather>>()
+            coEvery { repository.getCurrentWeather(any(), any()) } coAnswers { gate.await() }
+            coEvery { repository.getHourlyForecast(any(), any()) } returns Result.success(hourly)
+            coEvery { repository.getDailyForecast(any(), any()) } returns Result.success(daily)
+
+            val vm = viewModel()
+            vm.refresh()
+            runCurrent()
+
+            assertTrue("刷新期间 isLoading 应为 true", vm.uiState.value.isLoading)
+
+            // 放行网络请求:此时网络已返回,但最小指示时长未到,isLoading 应保持 true
+            gate.complete(Result.success(current))
+            runCurrent()
+            assertTrue("最小指示时长内 isLoading 应保持 true", vm.uiState.value.isLoading)
+
+            // 推进虚拟时间越过最小指示时长,isLoading 才结束
+            advanceTimeBy(600)
+            runCurrent()
+
+            assertFalse("刷新完成后 isLoading 应为 false", vm.uiState.value.isLoading)
+            // 三个请求均走 forceRefresh = true 路径
+            coVerify(exactly = 1) {
+                repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION, true)
+            }
+            coVerify(exactly = 1) {
+                repository.getHourlyForecast(WeatherViewModel.DEFAULT_LOCATION, true)
+            }
+            coVerify(exactly = 1) {
+                repository.getDailyForecast(WeatherViewModel.DEFAULT_LOCATION, true)
+            }
         }
 
     // ── 加载中状态与防重入 ──
