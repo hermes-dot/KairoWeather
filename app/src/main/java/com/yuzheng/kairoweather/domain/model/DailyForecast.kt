@@ -2,15 +2,16 @@ package com.yuzheng.kairoweather.domain.model
 
 import androidx.compose.runtime.Stable
 
+/** 逐日预报,数值字段([highTempCelsius]/[lowTempCelsius]/[popPct]/[uvIndexValue])由 UI 层格式化。 */
 @Stable
 data class DailyForecast(
     val date: String,
-    val highTemp: String,
-    val lowTemp: String,
+    val highTempCelsius: Double,
+    val lowTempCelsius: Double,
     val iconCode: String,
     val description: String,
-    val pop: String,
-    val uvIndex: String,
+    val popPct: Int,
+    val uvIndexValue: Int,
     val moonPhase: MoonPhase,
     val sunrise: String,
     val sunset: String
