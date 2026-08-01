@@ -6,7 +6,9 @@ import com.yuzheng.kairoweather.domain.model.TemperatureUnit
 import com.yuzheng.kairoweather.domain.model.ThemeMode
 import java.io.File
 import java.nio.file.Files
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -72,6 +74,23 @@ class UserPreferencesTest {
 
         assertEquals(ThemeMode.DARK, preferences.themeMode.first())
         assertTrue(prefsFile().exists())
+    }
+
+    @Test
+    fun `theme mode flow emits DARK to already-active collector after write`(): Unit = runBlocking {
+        val emissions = Channel<ThemeMode>(capacity = Channel.UNLIMITED)
+        val job = launch {
+            preferences.themeMode.collect { emissions.send(it) }
+        }
+
+        // 先确认持续订阅的收集器已拿到 DataStore 当前值(SYSTEM 默认)
+        assertEquals(ThemeMode.SYSTEM, emissions.receive())
+
+        preferences.setThemeMode(ThemeMode.DARK)
+
+        // 回归:持续 collect 的收集器必须收到后续切换值;一次性 first() 订阅只会停在首值
+        assertEquals(ThemeMode.DARK, emissions.receive())
+        job.cancel()
     }
 
     @Test

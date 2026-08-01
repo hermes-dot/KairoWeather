@@ -12,7 +12,7 @@ import com.yuzheng.kairoweather.ui.navigation.MainScreen
 import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -25,10 +25,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         setContent {
-            // P2-C7: produceState 挂起首帧直到 DataStore 出值,避免首帧按 "system" 闪变;
+            // produceState 挂起首帧直到 DataStore 出值(防闪变),并持续 collect 响应切换;
             // 主题已枚举化(批次C),ThemeMode.SYSTEM 仅作读取前的初始占位。
             val themeMode by produceState(initialValue = ThemeMode.SYSTEM) {
-                value = preferences.themeMode.first()
+                preferences.themeMode.collect { value = it }
             }
             KairoWeatherTheme(themeMode = themeMode) {
                 MainScreen()
