@@ -8,6 +8,7 @@ import com.yuzheng.kairoweather.data.repository.WeatherRepository
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,6 +27,12 @@ class WeatherViewModel @Inject constructor(
     companion object {
         /** 默认城市坐标(北京),权限被拒绝或定位失败时使用 */
         const val DEFAULT_LOCATION = "116.41,39.92"
+
+        /**
+         * 下拉刷新最小指示时长:即使网络瞬时返回(如本地缓存/极快响应),
+         * 指示器也至少停留该时长,保证用户可感知刷新已触发。
+         */
+        private const val MIN_REFRESH_INDICATOR_MS = 500L
     }
 
     private val _uiState = MutableStateFlow(WeatherUiState())
@@ -72,12 +79,29 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
-    fun refresh() = loadingWeather(lastLocation)
+    /**
+     * 下拉刷新:强制回源(forceRefresh = true 绕过 TTL 缓存),并保证指示器
+     * 至少展示 [MIN_REFRESH_INDICATOR_MS] 毫秒,避免缓存命中/瞬时返回时一闪而过。
+     */
+    fun refresh() {
+        if (_uiState.value.isLoading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            val start = System.currentTimeMillis()
+            loadWeatherInternal(lastLocation, forceRefresh = true)
+            val elapsed = System.currentTimeMillis() - start
+            if (elapsed < MIN_REFRESH_INDICATOR_MS) {
+                delay(MIN_REFRESH_INDICATOR_MS - elapsed)
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
 
     /** 地名反查与天气加载并行执行,避免反查慢拖延天气展示(P2-7)。 */
     private suspend fun loadWeatherAndResolveName(location: String) = coroutineScope {
         launch { resolveLocationName(location) }
-        launch { loadWeatherInternal(location) }
+        loadWeatherInternal(location)
+        _uiState.update { it.copy(isLoading = false) }
     }
 
     private suspend fun resolveLocationName(coords: String) {
@@ -85,25 +109,24 @@ class WeatherViewModel @Inject constructor(
             .onSuccess { name -> _uiState.update { it.copy(locationName = name) } }
     }
 
-    private suspend fun loadWeatherInternal(location: String) = coroutineScope {
-        val currentJob = launch { loadCurrent(location) }
-        val hourlyJob = launch { loadHourly(location) }
-        val dailyJob = launch { loadDaily(location) }
+    private suspend fun loadWeatherInternal(location: String, forceRefresh: Boolean = false) = coroutineScope {
+        val currentJob = launch { loadCurrent(location, forceRefresh) }
+        val hourlyJob = launch { loadHourly(location, forceRefresh) }
+        val dailyJob = launch { loadDaily(location, forceRefresh) }
 
         currentJob.join(); hourlyJob.join(); dailyJob.join()
-        _uiState.update { it.copy(isLoading = false) }
     }
 
-    private suspend fun loadCurrent(location: String) {
-        repository.getCurrentWeather(location)
+    private suspend fun loadCurrent(location: String, forceRefresh: Boolean = false) {
+        repository.getCurrentWeather(location, forceRefresh)
             .onSuccess { _uiState.update { s -> s.copy(current = it) } }
             // P2-6: error 仅由 current 请求写入,整页错误只反映当前天气失败;
             // hourly/daily 失败保持静默,不覆盖已加载的数据。
             .onFailure { _uiState.update { s -> s.copy(error = it.message) } }
     }
 
-    private suspend fun loadHourly(location: String) {
-        repository.getHourlyForecast(location)
+    private suspend fun loadHourly(location: String, forceRefresh: Boolean = false) {
+        repository.getHourlyForecast(location, forceRefresh)
             .onSuccess { hours ->
                 _uiState.update { s ->
                     s.copy(
@@ -113,8 +136,8 @@ class WeatherViewModel @Inject constructor(
             }
     }
 
-    private suspend fun loadDaily(location: String) {
-        repository.getDailyForecast(location)
+    private suspend fun loadDaily(location: String, forceRefresh: Boolean = false) {
+        repository.getDailyForecast(location, forceRefresh)
             .onSuccess { days ->
                 _uiState.update { s ->
                     s.copy(

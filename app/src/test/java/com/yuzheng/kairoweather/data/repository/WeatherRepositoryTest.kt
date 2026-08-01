@@ -107,6 +107,21 @@ class WeatherRepositoryTest {
     }
 
     @Test
+    fun `forceRefresh bypasses cache`(): Unit = runTest {
+        coEvery { api.getCurrentWeather(any()) } returns QWeatherNowResponse(
+            code = "200",
+            now = QWeatherNow(temp = "24", text = "晴", icon = "100"),
+        )
+
+        // 第一次正常调用写入缓存
+        repository.getCurrentWeather("1,2")
+        // 第二次 forceRefresh = true 应跳过缓存读取,直接回源
+        repository.getCurrentWeather("1,2", forceRefresh = true)
+
+        coVerify(exactly = 2) { api.getCurrentWeather("1,2") }
+    }
+
+    @Test
     fun `getHourlyForecast caches success within ttl`(): Unit = runTest {
         coEvery { api.getHourlyWeather(any(), any()) } returns QWeatherHourlyResponse(
             code = "200",
