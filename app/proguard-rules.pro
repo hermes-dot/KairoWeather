@@ -22,7 +22,7 @@
 
 # ── kotlinx.serialization ──
 # 保留序列化器及其描述符，开启混淆时保证反射仍可用
--keepattributes *Annotation*, InnerClasses
+-keepattributes *Annotation*, InnerClasses, Signature
 -dontnote kotlinx.serialization.AnnotationsKt
 -keep,includedescriptorclasses class com.yuzheng.kairoweather.**$$serializer { *; }
 -keepclassmembers class com.yuzheng.kairoweather.** {
@@ -31,6 +31,15 @@
 -keepclasseswithmembers class com.yuzheng.kairoweather.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
+-keepclasseswithmembers class * {
+    @kotlinx.serialization.Serializable <methods>;
+}
+
+# ── Compose ──
+# Compose 依赖库自带 consumer rules;此处兜底仅保留 runtime 内部类,
+# 避免整包 keep 影响超过 100 类(IDE/Shrinker 检查报警)。
+-dontwarn androidx.compose.**
+-keep class androidx.compose.runtime.internal.** { *; }
 
 # ── Retrofit / OkHttp ──
 -dontwarn retrofit2.**
