@@ -10,6 +10,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import com.yuzheng.kairoweather.domain.model.ThemeMode
 
 private val LightColorScheme = lightColorScheme(
     primary = SkyBlue,
@@ -87,14 +88,14 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun KairoWeatherTheme(
-    themeMode: String = "system",
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val darkTheme = when (themeMode) {
-        "dark" -> true
-        "light" -> false
-        else -> isSystemInDarkTheme()
+        ThemeMode.DARK -> true
+        ThemeMode.LIGHT -> false
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
     }
 
     val colorScheme = when {

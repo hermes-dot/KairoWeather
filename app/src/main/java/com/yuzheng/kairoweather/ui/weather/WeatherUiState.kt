@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
 import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
+import com.yuzheng.kairoweather.domain.model.TemperatureUnit
 
 @Stable
 data class WeatherUiState(
@@ -11,8 +12,9 @@ data class WeatherUiState(
     val hourly: List<HourlyForecast> = emptyList(),
     val daily: List<DailyForecast> = emptyList(),
     val isLoading: Boolean = false,
+    /** 整页错误信息,仅由 current 请求失败时写入(P2-6);hourly/daily 失败不写此字段 */
     val error: String? = null,
     val sunProgress: Float = 0f,
     val locationName: String = "北京",
-    val temperatureUnit: String = "celsius"
+    val temperatureUnit: TemperatureUnit = TemperatureUnit.CELSIUS
 )

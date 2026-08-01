@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
@@ -26,12 +27,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
+import com.yuzheng.kairoweather.domain.model.TemperatureUnit
+import com.yuzheng.kairoweather.domain.model.toPercentString
+import com.yuzheng.kairoweather.domain.model.toTempString
+import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
 
 @Composable
 fun HourlyForecastRow(
     items: List<HourlyForecast>,
+    unit: TemperatureUnit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier) {
@@ -39,8 +46,9 @@ fun HourlyForecastRow(
             contentPadding = PaddingValues(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            itemsIndexed(items, key = { _, hour -> hour.time }) { index, hour ->
-                HourlyItem(hour, Modifier.width(64.dp))
+            // P2-10: key 用 index 前缀,避免 API 返回重复 fxTime 时抛 "Key already used"
+            itemsIndexed(items, key = { index, hour -> "$index-${hour.time}" }) { index, hour ->
+                HourlyItem(hour, unit, Modifier.width(64.dp))
                 if (index < items.lastIndex) {
                     VerticalDivider(
                         modifier = Modifier.height(44.dp),
@@ -55,10 +63,11 @@ fun HourlyForecastRow(
 @Composable
 private fun HourlyItem(
     hour: HourlyForecast,
+    unit: TemperatureUnit,
     modifier: Modifier = Modifier,
 ) {
     val isNow = hour.isNow
-    val popValue = hour.pop.removeSuffix("%").toIntOrNull() ?: 0
+    val popValue = hour.popPct
 
     Column(
         modifier = modifier
@@ -100,7 +109,7 @@ private fun HourlyItem(
         Spacer(Modifier.height(6.dp))
 
         Text(
-            text = hour.temperature,
+            text = hour.tempCelsius.toTempString(unit),
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             color = if (isNow) MaterialTheme.colorScheme.primary
@@ -122,12 +131,37 @@ private fun HourlyItem(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text = hour.pop,
+                        text = hour.popPct.toPercentString(),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
         }
+    }
+}
+
+// ── Preview ──
+
+private val previewHours = listOf(
+    HourlyForecast(time = "现在", tempCelsius = 24.0, iconCode = "100", popPct = 10, isNow = true),
+    HourlyForecast(time = "13:00", tempCelsius = 25.0, iconCode = "101", popPct = 20, isNow = false),
+    HourlyForecast(time = "14:00", tempCelsius = 26.0, iconCode = "300", popPct = 60, isNow = false),
+    HourlyForecast(time = "15:00", tempCelsius = 24.0, iconCode = "400", popPct = 0, isNow = false),
+)
+
+@Preview(name = "HourlyForecastRow - Light", showBackground = true)
+@Composable
+private fun HourlyForecastRowPreview() {
+    KairoWeatherTheme {
+        HourlyForecastRow(previewHours, TemperatureUnit.CELSIUS, Modifier.padding(16.dp))
+    }
+}
+
+@Preview(name = "HourlyForecastRow - Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun HourlyForecastRowDarkPreview() {
+    KairoWeatherTheme {
+        HourlyForecastRow(previewHours, TemperatureUnit.CELSIUS)
     }
 }
