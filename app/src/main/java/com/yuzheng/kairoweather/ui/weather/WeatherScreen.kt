@@ -39,6 +39,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuzheng.kairoweather.R
+import com.yuzheng.kairoweather.domain.model.TemperatureUnit
 import com.yuzheng.kairoweather.ui.weather.components.AirQualityCard
 import com.yuzheng.kairoweather.ui.weather.components.DailyForecastList
 import com.yuzheng.kairoweather.ui.weather.components.HourlyForecastRow
@@ -58,6 +59,10 @@ fun WeatherScreen(
     viewModel: WeatherViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // 单位真值源是 DataStore,UI 层直接订阅(经 VM 暴露),不再从页面状态镜像读取
+    val unit by viewModel.temperatureUnit.collectAsStateWithLifecycle(
+        initialValue = TemperatureUnit.CELSIUS,
+    )
     val context = LocalContext.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -95,13 +100,16 @@ fun WeatherScreen(
             .background(Brush.verticalGradient(weatherSkyGradient())),
         color = Color.Transparent,
     ) {
-        when {
-            state.isLoading && state.current == null -> LoadingContent()
-            state.error != null && state.current == null ->
-                ErrorContent(state.error!!, onRetry = { viewModel.refresh() })
-            state.current != null -> WeatherContent(state, onRefresh = { viewModel.refresh() })
-            // P2-8: 初始 state(current==null && !isLoading && error==null)时的首帧兜底,避免空白闪帧
-            else -> LoadingContent()
+        // sealed 三态穷尽:编译期保证无空白帧,旧 P2-8 的 else 兜底分支退役。
+        // by 委托属性无 smart cast,提局部 val 再 when(state as Ready)。
+        when (val s = state) {
+            WeatherUiState.Loading -> LoadingContent()
+            is WeatherUiState.Failed -> ErrorContent(s.message, onRetry = { viewModel.refresh() })
+            is WeatherUiState.Ready -> WeatherContent(
+                state = s,
+                unit = unit,
+                onRefresh = { viewModel.refresh() },
+            )
         }
     }
 }
@@ -140,12 +148,17 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
-    val weather = state.current ?: return
+private fun WeatherContent(
+    state: WeatherUiState.Ready,
+    unit: TemperatureUnit,
+    onRefresh: () -> Unit,
+) {
+    // Ready.current 非空由类型保证,旧 `?: return` 补丁退役;刷新指示读 isRefreshing 旗标。
+    val weather = state.current
     val dailyFirst = state.daily.firstOrNull()
 
     PullToRefreshBox(
-        isRefreshing = state.isLoading,
+        isRefreshing = state.isRefreshing,
         onRefresh = onRefresh,
         modifier = Modifier.fillMaxSize(),
     ) {
@@ -163,7 +176,7 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                     tempCelsius = weather.tempCelsius,
                     condition = weather.condition,
                     feelsLikeCelsius = weather.feelsLikeCelsius,
-                    unit = state.temperatureUnit,
+                    unit = unit,
                 )
             }
 
@@ -189,13 +202,13 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                     )
                 }
                 item(key = "spacer_hourly_mid") { Spacer(Modifier.height(8.dp)) }
-                item(key = "hourly") { HourlyForecastRow(state.hourly, state.temperatureUnit) }
+                item(key = "hourly") { HourlyForecastRow(state.hourly, unit) }
             }
 
             // ── 逐日预报 ──
             if (state.daily.isNotEmpty()) {
                 item(key = "spacer_daily_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
-                item(key = "daily") { WeekForecastChartCard(state.daily, state.temperatureUnit) }
+                item(key = "daily") { WeekForecastChartCard(state.daily, unit) }
             }
 
             item(key = "spacer_detail_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }

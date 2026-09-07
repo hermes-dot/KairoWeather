@@ -22,6 +22,7 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -29,7 +30,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -82,7 +82,7 @@ class WeatherViewModelTest {
     init {
         // air 默认成功桩放 init 而非 viewModel() helper:有测试绕过 helper 直接构造 VM,
         // strict mock 缺省会抛异常被 resultCatching 吞成 null——测试"假绿"。
-        // mockk 后写生效:失败路径用例在构造 VM 前自行 coEvery 覆盖本桩。
+        // mockk 后写生效:失败路径用例在 VM 构造之后自行 coEvery 覆盖本桩。
         coEvery { repository.getAirQuality(any(), any()) } returns Result.success(air)
     }
 
@@ -90,6 +90,11 @@ class WeatherViewModelTest {
         every { preferences.temperatureUnit } returns flowOf(unit)
         return WeatherViewModel(repository, locationTracker, preferences)
     }
+
+    /** sealed 后的统一读取口:非 Ready 即测试失败,失败信息带实际态。 */
+    private fun ready(vm: WeatherViewModel): WeatherUiState.Ready =
+        vm.uiState.value as? WeatherUiState.Ready
+            ?: error("expected Ready, got ${vm.uiState.value::class.simpleName}")  // error 返回 Nothing;fail() 返回 Unit 不满足 elvis 类型
 
     private fun stubWeatherSuccess() {
         // 签名含 forceRefresh,用 any(), any() 让普通加载与强制刷新两种路径都命中
@@ -118,19 +123,11 @@ class WeatherViewModelTest {
     // ── 加载流程 ──
 
     @Test
-    fun `initial state uses defaults`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
+    fun `initial state is Loading`() {
         val vm = viewModel()
-        runCurrent()
 
-        val state = vm.uiState.value
-        assertNull(state.current)
-        assertTrue(state.hourly.isEmpty())
-        assertTrue(state.daily.isEmpty())
-        assertFalse(state.isLoading)
-        assertNull(state.error)
-        assertEquals(0f, state.sunProgress)
-        assertEquals("北京", state.locationName)
-        assertEquals(TemperatureUnit.CELSIUS, state.temperatureUnit)
+        // sealed 状态机:首帧必为 Loading,不再存在"平铺字段全空"的第四种组合(P2-8)
+        assertTrue(vm.uiState.value is WeatherUiState.Loading)
     }
 
     @Test
@@ -146,13 +143,12 @@ class WeatherViewModelTest {
             vm.loadFromCurrentLocation()
             advanceUntilIdle()
 
-            val state = vm.uiState.value
+            val state = ready(vm)
             assertEquals(current, state.current)
             assertEquals(hourly, state.hourly)
             assertEquals(daily, state.daily)
             assertEquals("北京", state.locationName)
-            assertFalse(state.isLoading)
-            assertNull(state.error)
+            assertFalse(state.isRefreshing)
 
             verify(exactly = 1) { locationTracker.formatLocation(location) }
             coVerify(exactly = 1) { repository.reverseGeocode("116.41,39.90") }
@@ -174,9 +170,9 @@ class WeatherViewModelTest {
             vm.loadFromCurrentLocation()
             advanceUntilIdle()
 
-            assertEquals("北京", vm.uiState.value.locationName)
-            assertNull(vm.uiState.value.error)
-            assertFalse(vm.uiState.value.isLoading)
+            val state = ready(vm)
+            assertEquals("北京", state.locationName)
+            assertFalse(state.isRefreshing)
             coVerify(exactly = 1) {
                 repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION)
             }
@@ -207,8 +203,31 @@ class WeatherViewModelTest {
             vm.loadFromCurrentLocation()
             advanceUntilIdle()
 
-            assertEquals("北京", vm.uiState.value.locationName)
-            assertEquals(current, vm.uiState.value.current)
+            val state = ready(vm)
+            assertEquals("北京", state.locationName)
+            assertEquals(current, state.current)
+        }
+
+    @Test
+    fun `city name resolved before weather arrives survives into Ready`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            // 冷启动竞态:反查快、current 慢。地名到达时无 Ready 可写,
+            // 必须暂存并在天气投影时消费——否则地名被默认值覆盖丢失。
+            val gate = CompletableDeferred<Result<CurrentWeather>>()
+            coEvery { repository.getCurrentWeather(any(), any()) } coAnswers { gate.await() }
+            coEvery { repository.getHourlyForecast(any(), any()) } returns Result.success(hourly)
+            coEvery { repository.getDailyForecast(any(), any()) } returns Result.success(daily)
+            coEvery { repository.reverseGeocode(any()) } returns Result.success("上海")
+
+            val vm = viewModel()
+            vm.loadingWeather("1.00,2.00")
+            runCurrent()
+            // 地名已回,天气未到:仍是 Loading
+            assertTrue(vm.uiState.value is WeatherUiState.Loading)
+
+            gate.complete(Result.success(current))
+            advanceUntilIdle()
+            assertEquals("上海", ready(vm).locationName)
         }
 
     @Test
@@ -231,37 +250,38 @@ class WeatherViewModelTest {
     @Test
     fun `refresh forces network and keeps indicator for min duration`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
-            // gate 控制 current 请求返回时机,验证刷新期间 isLoading 持续为 true
-            val gate = CompletableDeferred<Result<CurrentWeather>>()
-            coEvery { repository.getCurrentWeather(any(), any()) } coAnswers { gate.await() }
-            coEvery { repository.getHourlyForecast(any(), any()) } returns Result.success(hourly)
-            coEvery { repository.getDailyForecast(any(), any()) } returns Result.success(daily)
+            stubWeatherSuccess()
+            stubNameSuccess()
 
             val vm = viewModel()
+            vm.loadingWeather("116.41,39.92")
+            advanceUntilIdle()
+            assertFalse(ready(vm).isRefreshing)
+
+            // 有内容的热刷新:gate 卡住 current,验证 isRefreshing 旗标生命周期
+            val gate = CompletableDeferred<Result<CurrentWeather>>()
+            coEvery { repository.getCurrentWeather(any(), any()) } coAnswers { gate.await() }
             vm.refresh()
             runCurrent()
+            assertTrue("刷新期间 isRefreshing 应为 true", ready(vm).isRefreshing)
 
-            assertTrue("刷新期间 isLoading 应为 true", vm.uiState.value.isLoading)
-
-            // 放行网络请求:此时网络已返回,但最小指示时长未到,isLoading 应保持 true
             gate.complete(Result.success(current))
             runCurrent()
-            assertTrue("最小指示时长内 isLoading 应保持 true", vm.uiState.value.isLoading)
+            assertTrue("最小指示时长内 isRefreshing 应保持 true", ready(vm).isRefreshing)
 
-            // 推进虚拟时间越过最小指示时长,isLoading 才结束
             advanceTimeBy(600)
             runCurrent()
+            assertFalse("刷新完成后 isRefreshing 应为 false", ready(vm).isRefreshing)
 
-            assertFalse("刷新完成后 isLoading 应为 false", vm.uiState.value.isLoading)
-            // 三个请求均走 forceRefresh = true 路径
+            // 刷新路径全部 forceRefresh = true(首次加载的 4 路 + 刷新的 3 路共查)
             coVerify(exactly = 1) {
-                repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION, true)
+                repository.getCurrentWeather("116.41,39.92", true)
             }
             coVerify(exactly = 1) {
-                repository.getHourlyForecast(WeatherViewModel.DEFAULT_LOCATION, true)
+                repository.getHourlyForecast("116.41,39.92", true)
             }
             coVerify(exactly = 1) {
-                repository.getDailyForecast(WeatherViewModel.DEFAULT_LOCATION, true)
+                repository.getDailyForecast("116.41,39.92", true)
             }
         }
 
@@ -278,7 +298,7 @@ class WeatherViewModelTest {
             vm.loadFromCurrentLocation()
             runCurrent()
 
-            assertTrue(vm.uiState.value.isLoading)
+            assertTrue(vm.uiState.value is WeatherUiState.Loading)
 
             // 加载期间再次触发加载应被忽略
             vm.loadFromCurrentLocation()
@@ -290,7 +310,7 @@ class WeatherViewModelTest {
             gate.complete(Result.failure(IllegalStateException("stop")))
             advanceUntilIdle()
 
-            assertFalse(vm.uiState.value.isLoading)
+            assertEquals(current, ready(vm).current)
             // 期间未发起任何额外天气请求
             coVerify(exactly = 1) { repository.getCurrentWeather(any()) }
             coVerify(exactly = 0) { repository.getCurrentWeather("9.00,9.00") }
@@ -317,7 +337,7 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            val result = vm.uiState.value.hourly
+            val result = ready(vm).hourly
             assertEquals(3, result.size)
             assertTrue(result[0].isNow)
             assertFalse(result[1].isNow)
@@ -351,11 +371,13 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            val result = vm.uiState.value.hourly
+            val result = ready(vm).hourly
             assertEquals(2, result.size)
             assertTrue("当前小时应被标记 isNow", result[0].isNow)
             assertFalse("下一小时不应标记", result[1].isNow)
         }
+
+    // ── 失败分级(P2-6:current 整页失败;hourly/daily/air 卡级静默) ──
 
     @Test
     fun `hourly failure keeps hourly empty without crashing`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
@@ -369,15 +391,14 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            // 当前实现:逐小时失败被静默忽略,error 仅由当前天气失败触发
-            assertNull(vm.uiState.value.error)
-            assertTrue(vm.uiState.value.hourly.isEmpty())
-            assertEquals(current, vm.uiState.value.current)
-            assertFalse(vm.uiState.value.isLoading)
+            // hourly 失败静默:进 Ready、hourly 空、不触发 Failed
+            val state = ready(vm)
+            assertTrue(state.hourly.isEmpty())
+            assertEquals(current, state.current)
         }
 
     @Test
-    fun `current weather failure sets error and keeps loading false`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
+    fun `current failure on empty page sets Failed`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
             coEvery { repository.getCurrentWeather(any()) } returns
                 Result.failure(Exception("api boom"))
             coEvery { repository.getHourlyForecast(any()) } returns Result.success(hourly)
@@ -388,13 +409,33 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            assertEquals("api boom", vm.uiState.value.error)
-            assertNull(vm.uiState.value.current)
-            assertFalse(vm.uiState.value.isLoading)
+            val state = vm.uiState.value
+            assertTrue(state is WeatherUiState.Failed)
+            assertEquals("api boom", (state as WeatherUiState.Failed).message)
         }
 
     @Test
-    fun `air loaded in parallel and exposed in state`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
+    fun `current failure during refresh keeps Ready with old data`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            stubWeatherSuccess()
+            stubNameSuccess()
+            val vm = viewModel()
+            vm.loadingWeather("116.41,39.92")
+            advanceUntilIdle()
+
+            // 刷新时 current 失败:已有内容保持 Ready,不打回 Failed(旧数据可看)
+            coEvery { repository.getCurrentWeather(any(), any()) } returns
+                Result.failure(Exception("network flaky"))
+            vm.refresh()
+            advanceUntilIdle()
+
+            val state = ready(vm)
+            assertEquals(current, state.current)
+            assertFalse(state.isRefreshing)
+        }
+
+    @Test
+    fun `air loaded with weather snapshot and exposed in Ready`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
             stubWeatherSuccess()
             stubNameSuccess()
 
@@ -402,7 +443,7 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            assertEquals(air, vm.uiState.value.air)
+            assertEquals(air, ready(vm).air)
             coVerify(exactly = 1) { repository.getAirQuality("116.41,39.92") }
         }
 
@@ -418,16 +459,16 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            // P2-6 静默语义:AQI 失败不写 error、不影响 current;air 置 null 即 AQI 卡不渲染
-            assertNull(vm.uiState.value.air)
-            assertNull(vm.uiState.value.error)
-            assertEquals(current, vm.uiState.value.current)
+            // P2-6 静默语义:AQI 失败不落 Failed、不影响 current;air=null 即 AQI 卡不渲染
+            val state = ready(vm)
+            org.junit.Assert.assertNull(state.air)
+            assertEquals(current, state.current)
         }
 
-    // ── 温度单位(P1-2:单位切换不重拉数据,仅 UI 层重格式化) ──
+    // ── 温度单位(P1-2 延伸:VM 直暴 DataStore 流,不再镜像进页面态) ──
 
     @Test
-    fun `temperature unit flow updates state without refetching`(): Unit =
+    fun `temperature unit flow passes through without refetching`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
             val unitFlow = MutableStateFlow(TemperatureUnit.CELSIUS)
             every { preferences.temperatureUnit } returns unitFlow
@@ -435,19 +476,17 @@ class WeatherViewModelTest {
             stubWeatherSuccess()
 
             val vm = WeatherViewModel(repository, locationTracker, preferences)
-            runCurrent()
-            assertEquals(TemperatureUnit.CELSIUS, vm.uiState.value.temperatureUnit)
+            assertEquals(TemperatureUnit.CELSIUS, vm.temperatureUnit.first())
 
-            // 单位切换后 state 立即反映新单位,但不应触发任何网络请求
+            // 单位切换即时反映到流上,且不触发任何网络请求(domain 存原始值,UI 重格式化)
             unitFlow.value = TemperatureUnit.FAHRENHEIT
-            runCurrent()
-            assertEquals(TemperatureUnit.FAHRENHEIT, vm.uiState.value.temperatureUnit)
+            assertEquals(TemperatureUnit.FAHRENHEIT, vm.temperatureUnit.first())
             coVerify(exactly = 0) { repository.getCurrentWeather(any()) }
 
-            // 后续加载不带单位参数
+            // 后续加载与单位无关(Ready 类型上不带单位:双写源已移除)
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
-
+            assertEquals(TemperatureUnit.FAHRENHEIT, vm.temperatureUnit.first())
             coVerify(exactly = 1) { repository.getCurrentWeather("116.41,39.92") }
             coVerify(exactly = 1) { repository.getHourlyForecast("116.41,39.92") }
             coVerify(exactly = 1) { repository.getDailyForecast("116.41,39.92") }
@@ -486,7 +525,7 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            assertEquals(0f, vm.uiState.value.sunProgress)
+            assertEquals(0f, ready(vm).sunProgress)
         }
 
     @Test
@@ -500,6 +539,6 @@ class WeatherViewModelTest {
             vm.loadingWeather("116.41,39.92")
             advanceUntilIdle()
 
-            assertTrue(vm.uiState.value.sunProgress in 0f..1f)
+            assertTrue(ready(vm).sunProgress in 0f..1f)
         }
 }

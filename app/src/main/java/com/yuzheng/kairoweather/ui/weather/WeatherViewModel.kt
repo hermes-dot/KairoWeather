@@ -5,10 +5,17 @@ import androidx.lifecycle.viewModelScope
 import com.yuzheng.kairoweather.data.location.LocationTracker
 import com.yuzheng.kairoweather.data.preferences.UserPreferences
 import com.yuzheng.kairoweather.data.repository.WeatherRepository
+import com.yuzheng.kairoweather.domain.model.AirQuality
+import com.yuzheng.kairoweather.domain.model.CurrentWeather
+import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
+import com.yuzheng.kairoweather.domain.model.TemperatureUnit
+import com.yuzheng.kairoweather.ui.weather.WeatherUiState.Companion.DEFAULT_CITY_NAME
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,129 +42,189 @@ class WeatherViewModel @Inject constructor(
         private const val MIN_REFRESH_INDICATOR_MS = 500L
     }
 
-    private val _uiState = MutableStateFlow(WeatherUiState())
+    private val _uiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
+
+    /**
+     * 温度单位由 UI 层直接订阅 DataStore 流,不再 collect 镜像进页面状态——
+     * 旧设计里同一数据活在 SettingsViewModel 与 WeatherUiState 两处(双写源),
+     * 且有一个 collect 延迟窗口。单位切换不重拉数据:P2-A 后 domain 存原始摄氏值,
+     * 组件读此 flow 在 UI 层即时重新格式化。
+     */
+    val temperatureUnit: Flow<TemperatureUnit> = preferences.temperatureUnit
 
     private var lastLocation: String = DEFAULT_LOCATION
 
-    init {
-        viewModelScope.launch {
-            preferences.temperatureUnit.collect { unit ->
-                _uiState.update { it.copy(temperatureUnit = unit) }
-            }
-        }
-    }
+    /**
+     * 防重入旗标:覆盖"定位+地名反查+四路天气"的完整流程。
+     * 不能用 state is Loading 判定——初始态就是 Loading 会挡掉首次加载;
+     * Ready.isRefreshing 也只覆盖刷新指示,盖不住冷启动在途。独立标志语义最干净。
+     */
+    private var inFlight = false
 
     /**
-     * 单位切换不需要重拉数据:P2-A 后 domain 存原始摄氏数值,组件读 [WeatherUiState.temperatureUnit]
-     * 在 UI 层即时重新格式化即可。这里仍把单位收集进 state,供组件格式化时读取。
+     * 地名先于天气到达时的暂存(冷启动竞态:Ready 还不存在,无处安放)。
+     * 每次进入加载流程重置,防止上一城市的名字漏进新城市的 Ready。
      */
+    private var pendingCityName: String? = null
+
     fun loadFromCurrentLocation() {
-        if (_uiState.value.isLoading) return
+        if (inFlight) return
+        inFlight = true
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            locationTracker.getCurrentLocation()
-                .onSuccess { loc ->
-                    val coords = locationTracker.formatLocation(loc)
-                    lastLocation = coords
-                    loadWeatherAndResolveName(coords)
-                }
-                .onFailure {
-                    // 定位失败时回退到默认城市,保证页面可用
-                    lastLocation = DEFAULT_LOCATION
-                    loadWeatherAndResolveName(DEFAULT_LOCATION)
-                }
+            try {
+                markLoading()
+                locationTracker.getCurrentLocation()
+                    .onSuccess { loc ->
+                        val coords = locationTracker.formatLocation(loc)
+                        lastLocation = coords
+                        runLoad(coords, forceRefresh = false)
+                    }
+                    .onFailure {
+                        // 定位失败时回退到默认城市,保证页面可用
+                        lastLocation = DEFAULT_LOCATION
+                        runLoad(DEFAULT_LOCATION, forceRefresh = false)
+                    }
+                clearIndicator()
+            } finally {
+                inFlight = false
+            }
         }
     }
 
     fun loadingWeather(location: String) {
-        if (_uiState.value.isLoading) return
+        if (inFlight) return
+        inFlight = true
         lastLocation = location
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            loadWeatherAndResolveName(location)
+            try {
+                markLoading()
+                runLoad(location, forceRefresh = false)
+                clearIndicator()
+            } finally {
+                inFlight = false
+            }
         }
     }
 
     /**
-     * 下拉刷新:强制回源(forceRefresh = true 绕过 TTL 缓存),并保证指示器
+     * 下拉刷新/错误重试:强制回源(forceRefresh = true 绕过 TTL 缓存),并保证指示器
      * 至少展示 [MIN_REFRESH_INDICATOR_MS] 毫秒,避免缓存命中/瞬时返回时一闪而过。
+     * 最小延迟在 clearIndicator 之前等待——指示器时长才是这段延迟的存在意义。
      */
     fun refresh() {
-        if (_uiState.value.isLoading) return
+        if (inFlight) return
+        inFlight = true
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            val start = System.currentTimeMillis()
-            loadWeatherInternal(lastLocation, forceRefresh = true)
-            val elapsed = System.currentTimeMillis() - start
-            if (elapsed < MIN_REFRESH_INDICATOR_MS) {
-                delay(MIN_REFRESH_INDICATOR_MS - elapsed)
+            try {
+                markLoading()
+                val start = System.currentTimeMillis()
+                runLoad(lastLocation, forceRefresh = true)
+                val elapsed = System.currentTimeMillis() - start
+                if (elapsed < MIN_REFRESH_INDICATOR_MS) {
+                    delay(MIN_REFRESH_INDICATOR_MS - elapsed)
+                }
+                clearIndicator()
+            } finally {
+                inFlight = false
             }
-            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    /**
+     * 指示状态复位:Ready 有内容时转圈旗标归位;Loading/Failed 的指示器就是页面态本身,
+     * 数据到达时由 [loadWeatherInternal] 的投影直接迁移,无需清理。
+     */
+    private fun markLoading() {
+        pendingCityName = null
+        _uiState.update {
+            when (it) {
+                is WeatherUiState.Ready -> it.copy(isRefreshing = true)
+                else -> WeatherUiState.Loading
+            }
+        }
+    }
+
+    private fun clearIndicator() {
+        _uiState.update {
+            if (it is WeatherUiState.Ready) it.copy(isRefreshing = false) else it
         }
     }
 
     /** 地名反查与天气加载并行执行,避免反查慢拖延天气展示(P2-7)。 */
-    private suspend fun loadWeatherAndResolveName(location: String) = coroutineScope {
+    private suspend fun runLoad(location: String, forceRefresh: Boolean) = coroutineScope {
         launch { resolveLocationName(location) }
-        loadWeatherInternal(location)
-        _uiState.update { it.copy(isLoading = false) }
+        loadWeatherInternal(location, forceRefresh)
     }
 
     private suspend fun resolveLocationName(coords: String) {
         repository.reverseGeocode(coords)
-            .onSuccess { name -> _uiState.update { it.copy(locationName = name) } }
-    }
-
-    private suspend fun loadWeatherInternal(location: String, forceRefresh: Boolean = false) = coroutineScope {
-        val currentJob = launch { loadCurrent(location, forceRefresh) }
-        val hourlyJob = launch { loadHourly(location, forceRefresh) }
-        val dailyJob = launch { loadDaily(location, forceRefresh) }
-        val airJob = launch { loadAir(location, forceRefresh) }
-
-        currentJob.join(); hourlyJob.join(); dailyJob.join(); airJob.join()
-    }
-
-    private suspend fun loadCurrent(location: String, forceRefresh: Boolean = false) {
-        repository.getCurrentWeather(location, forceRefresh)
-            .onSuccess { _uiState.update { s -> s.copy(current = it) } }
-            // P2-6: error 仅由 current 请求写入,整页错误只反映当前天气失败;
-            // hourly/daily/air 失败保持静默,不覆盖已加载的数据。
-            .onFailure { _uiState.update { s -> s.copy(error = it.message) } }
+            .onSuccess { name ->
+                _uiState.update {
+                    if (it is WeatherUiState.Ready) {
+                        it.copy(locationName = name)
+                    } else {
+                        // Ready 尚不存在(冷启动天气未到):暂存,投影时消费
+                        pendingCityName = name
+                        it
+                    }
+                }
+            }
     }
 
     /**
-     * 空气质量与主天气同批并行加载(P2-6 静默语义延伸):失败只意味着 AQI 卡不渲染。
-     * 切换城市成功前旧值保留会造成"新城市+旧 AQI"的错位,故成功即整体替换、
-     * 失败清空——缺席诚实,错配撒谎。
+     * 四路并行拉取,awaitAll 后一次投影——页面级原子快照:
+     * UI 不存在"current 已到、air 未落"的中间帧,各卡级降级(air=null 不渲染)
+     * 由 [WeatherUiState.Ready] 内部字段表达。
+     *
+     * 失败分级(P2-6):current 失败才整页 Failed;hourly/daily/air 失败以
+     * 空列表/缺席兜底进 Ready。刷新已有内容时 current 失败保持 Ready 静默
+     * (旧数据可看,好过把内容打回错误页)。
      */
-    private suspend fun loadAir(location: String, forceRefresh: Boolean = false) {
-        repository.getAirQuality(location, forceRefresh)
-            .onSuccess { air -> _uiState.update { s -> s.copy(air = air) } }
-            .onFailure { _uiState.update { s -> s.copy(air = null) } }
-    }
+    private suspend fun loadWeatherInternal(location: String, forceRefresh: Boolean) {
+        // 具名而非 List:异构 Result<T> 塞进一个 list 会擦除成 Any
+        val (currentRes, hourlyRes, dailyRes, airRes) = coroutineScope {
+            val now = async { repository.getCurrentWeather(location, forceRefresh) }
+            val hours = async { repository.getHourlyForecast(location, forceRefresh) }
+            val days = async { repository.getDailyForecast(location, forceRefresh) }
+            val air = async { repository.getAirQuality(location, forceRefresh) }
+            LoadedWeather(now.await(), hours.await(), days.await(), air.await())
+        }
 
-    private suspend fun loadHourly(location: String, forceRefresh: Boolean = false) {
-        repository.getHourlyForecast(location, forceRefresh)
-            .onSuccess { hours ->
-                _uiState.update { s ->
-                    s.copy(
-                        hourly = hours.map { hour -> hour.copy(isNow = isCurrentHour(hour)) }
+        val current = currentRes.getOrNull()
+        if (current == null) {
+            _uiState.update {
+                when (it) {
+                    is WeatherUiState.Ready -> it
+                    else -> WeatherUiState.Failed(
+                        currentRes.exceptionOrNull()?.message ?: "天气获取失败"
                     )
                 }
             }
-    }
+            return
+        }
 
-    private suspend fun loadDaily(location: String, forceRefresh: Boolean = false) {
-        repository.getDailyForecast(location, forceRefresh)
-            .onSuccess { days ->
-                _uiState.update { s ->
-                    s.copy(
-                        daily = days,
-                        sunProgress = calcSunProgress(days.firstOrNull()?.sunrise, days.firstOrNull()?.sunset)
-                    )
-                }
+        val hourly = (hourlyRes.getOrNull() ?: emptyList())
+            .map { hour -> hour.copy(isNow = isCurrentHour(hour)) }
+        val daily = dailyRes.getOrNull() ?: emptyList()
+        val airQuality = airRes.getOrNull()
+        val sunProgress = calcSunProgress(daily.firstOrNull()?.sunrise, daily.firstOrNull()?.sunset)
+
+        _uiState.update { s ->
+            if (s is WeatherUiState.Ready) {
+                // 原地刷新:locationName 由反查流自行维护(isRefreshing 由入口管),此处不碰
+                s.copy(
+                    current = current, hourly = hourly, daily = daily,
+                    air = airQuality, sunProgress = sunProgress,
+                )
+            } else {
+                WeatherUiState.Ready(
+                    current = current, hourly = hourly, daily = daily,
+                    air = airQuality, sunProgress = sunProgress,
+                    locationName = pendingCityName ?: DEFAULT_CITY_NAME,
+                )
             }
+        }
     }
 
     /**
@@ -174,6 +241,14 @@ class WeatherViewModel @Inject constructor(
         val nowInTargetZone = OffsetDateTime.now().withOffsetSameInstant(odt.offset)
         return nowInTargetZone.toLocalDate() == odt.toLocalDate() && nowInTargetZone.hour == odt.hour
     }
+
+    /** 四路并行请求的具名结果束,仅本类投影用(异构 Result 不能混进同一 List)。 */
+    private data class LoadedWeather(
+        val current: Result<CurrentWeather>,
+        val hourly: Result<List<HourlyForecast>>,
+        val daily: Result<List<DailyForecast>>,
+        val air: Result<AirQuality>,
+    )
 
     private fun calcSunProgress(rise: String?, set: String?): Float {
         if (rise.isNullOrEmpty() || set.isNullOrEmpty()) return 0f

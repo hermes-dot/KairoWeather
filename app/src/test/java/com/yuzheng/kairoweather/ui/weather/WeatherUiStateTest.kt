@@ -1,8 +1,8 @@
 package com.yuzheng.kairoweather.ui.weather
 
+import com.yuzheng.kairoweather.domain.model.AirQuality
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
-import com.yuzheng.kairoweather.domain.model.TemperatureUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -10,6 +10,13 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * WeatherUiState sealed 状态机形状测试。
+ *
+ * 旧版针对可空字段的断言(默认值表、解构顺序、copy 语义)随平铺 data class
+ * 一起退役——sealed 后"非法状态不可表示"由编译器保证,这里只测 Ready 内部
+ * 卡级字段的默认降级形状与状态间不互等(状态机三态互斥的运行时侧影)。
+ */
 class WeatherUiStateTest {
 
     private val current = CurrentWeather(
@@ -26,79 +33,54 @@ class WeatherUiStateTest {
     )
 
     @Test
-    fun `defaults are empty and safe for first render`() {
-        val state = WeatherUiState()
+    fun `Ready requires current and defaults the rest to renderable-empty`() {
+        val ready = WeatherUiState.Ready(current = current)
 
-        assertNull(state.current)
-        assertTrue(state.hourly.isEmpty())
-        assertTrue(state.daily.isEmpty())
-        assertNull(state.air)
-        assertFalse(state.isLoading)
-        assertNull(state.error)
-        assertEquals(0f, state.sunProgress)
-        assertEquals("北京", state.locationName)
-        assertEquals(TemperatureUnit.CELSIUS, state.temperatureUnit)
+        assertEquals(current, ready.current)
+        assertTrue(ready.hourly.isEmpty())
+        assertTrue(ready.daily.isEmpty())
+        // air=null:卡级缺席是合法默认(AQI 卡不渲染),不是页面错误
+        assertNull(ready.air)
+        // 刷新旗标默认关:进 Ready ≠ 在转圈
+        assertFalse(ready.isRefreshing)
+        assertEquals(0f, ready.sunProgress)
+        assertEquals(WeatherUiState.DEFAULT_CITY_NAME, ready.locationName)
     }
 
     @Test
     fun `copy only overrides provided fields`() {
-        val state = WeatherUiState().copy(
-            current = current,
-            isLoading = true,
-            error = "boom",
+        val ready = WeatherUiState.Ready(current = current).copy(
+            air = AirQuality(aqi = 42, category = "优", primaryPollutant = "o3"),
+            isRefreshing = true,
         )
 
-        assertEquals(current, state.current)
-        assertTrue(state.isLoading)
-        assertEquals("boom", state.error)
-        // 未指定字段保持默认值
-        assertTrue(state.hourly.isEmpty())
-        assertTrue(state.daily.isEmpty())
-        assertNull(state.air)
-        assertEquals(0f, state.sunProgress)
-        assertEquals("北京", state.locationName)
-        assertEquals(TemperatureUnit.CELSIUS, state.temperatureUnit)
+        assertEquals(42, ready.air?.aqi)
+        assertTrue(ready.isRefreshing)
+        assertEquals(current, ready.current)
+        assertTrue(ready.hourly.isEmpty())
     }
 
     @Test
-    fun `data class equality and hashCode`() {
-        assertEquals(WeatherUiState(), WeatherUiState())
-        assertEquals(WeatherUiState().hashCode(), WeatherUiState().hashCode())
-        assertNotEquals(WeatherUiState(isLoading = true), WeatherUiState())
+    fun `three states are mutually unequal`() {
+        // 显式提到接口类型:绕开 JUnit assertNotEquals(long,long) 重载决议陷阱
+        val a: WeatherUiState = WeatherUiState.Loading
+        val b: WeatherUiState = WeatherUiState.Failed("boom")
+        val c: WeatherUiState = WeatherUiState.Ready(current = current)
+        assertNotEquals(a, b)
+        assertNotEquals(b, c)
+        assertNotEquals(c, a)
+    }
+
+    @Test
+    fun `ready equality is structural for data-class fields, loading is singleton`() {
+        assertEquals(
+            WeatherUiState.Ready(current = current, isRefreshing = true),
+            WeatherUiState.Ready(current = current, isRefreshing = true),
+        )
         assertNotEquals(
-            WeatherUiState(locationName = "上海"),
-            WeatherUiState(locationName = "北京"),
+            WeatherUiState.Ready(current = current, isRefreshing = true),
+            WeatherUiState.Ready(current = current, isRefreshing = false),
         )
-    }
-
-    @Test
-    fun `component accessors match declaration order`() {
-        val hourly = listOf(
-            HourlyForecast(time = "12:00", tempCelsius = 24.0, iconCode = "100", popPct = 10, isNow = true),
-        )
-        val air = com.yuzheng.kairoweather.domain.model.AirQuality(
-            aqi = 42, category = "优", primaryPollutant = "o3",
-        )
-        val state = WeatherUiState(
-            current = current,
-            hourly = hourly,
-            daily = emptyList(),
-            air = air,
-            isLoading = true,
-            error = "err",
-            sunProgress = 0.5f,
-            locationName = "上海",
-            temperatureUnit = TemperatureUnit.FAHRENHEIT,
-        )
-
-        assertEquals(current, state.component1())
-        assertEquals(hourly, state.component2())
-        assertEquals(emptyList<HourlyForecast>(), state.component3())
-        assertEquals(air, state.component4())
-        assertTrue(state.component5())
-        assertEquals("err", state.component6())
-        assertEquals(0.5f, state.component7())
-        assertEquals("上海", state.component8())
-        assertEquals(TemperatureUnit.FAHRENHEIT, state.component9())
+        assertEquals(WeatherUiState.Loading, WeatherUiState.Loading)
     }
 }
