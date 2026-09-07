@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,11 +36,10 @@ fun WeatherHeader(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(
-            imageVector = qWeatherIcon(iconCode),
+        WeatherGlyphImage(
+            code = iconCode,
             contentDescription = condition,
             modifier = Modifier.size(dimensionResource(R.dimen.main_icon_size)),
-            tint = MaterialTheme.colorScheme.primary,
         )
 
         Spacer(Modifier.width(8.dp))

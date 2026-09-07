@@ -1,6 +1,7 @@
 package com.yuzheng.kairoweather.ui.weather.components
 
 import android.content.res.Configuration
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,15 +37,15 @@ fun DailyForecastList(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(day.date, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                Icon(
-                    imageVector = qWeatherIcon(day.iconCode),
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.primary,
+                WeatherGlyphImage(
+                    code = day.iconCode,
+                    contentDescription = day.description,
+                    size = 24.dp,
                 )
+                Spacer(modifier = Modifier.width(2.dp))
                 Text(
                     day.description,
                     modifier = Modifier.weight(1f),
@@ -61,7 +61,11 @@ fun DailyForecastList(
                     Spacer(Modifier.width(8.dp))
                 }
                 Text(
-                    "${day.lowTempCelsius.toTempString(unit)} / ${day.highTempCelsius.toTempString(unit)}",
+                    "${day.lowTempCelsius.toTempString(unit)} / ${
+                        day.highTempCelsius.toTempString(
+                            unit
+                        )
+                    }",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -118,7 +122,11 @@ private fun DailyForecastListPreview() {
     }
 }
 
-@Preview(name = "DailyForecastList - Dark", showBackground = true, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(
+    name = "DailyForecastList - Dark",
+    showBackground = true,
+    uiMode = Configuration.UI_MODE_NIGHT_YES
+)
 @Composable
 private fun DailyForecastListDarkPreview() {
     KairoWeatherTheme {

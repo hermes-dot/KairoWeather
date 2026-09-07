@@ -97,12 +97,10 @@ private fun HourlyItem(
             modifier = pillModifier,
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = qWeatherIcon(hour.iconCode),
+            WeatherGlyphImage(
+                code = hour.iconCode,
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
-                tint = if (isNow) MaterialTheme.colorScheme.onPrimaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant,
+                size = 22.dp,
             )
         }
 
