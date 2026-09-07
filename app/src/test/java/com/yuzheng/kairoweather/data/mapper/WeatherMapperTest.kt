@@ -206,25 +206,26 @@ class WeatherMapperTest {
 
     @Test
     fun `toTempString handles zero negative and fractional celsius`() {
-        assertEquals("0°", 0.0.toTempString(TemperatureUnit.CELSIUS))
-        assertEquals("-3°", (-3.9).toTempString(TemperatureUnit.CELSIUS))
-        assertEquals("24°", 24.7.toTempString(TemperatureUnit.CELSIUS))
-        assertEquals("0°", (-0.5).toTempString(TemperatureUnit.CELSIUS))
+        assertEquals("0°C", 0.0.toTempString(TemperatureUnit.CELSIUS))
+        assertEquals("-3°C", (-3.9).toTempString(TemperatureUnit.CELSIUS))
+        assertEquals("24°C", 24.7.toTempString(TemperatureUnit.CELSIUS))
+        assertEquals("0°C", (-0.5).toTempString(TemperatureUnit.CELSIUS))
     }
 
     @Test
     fun `toTempString converts fahrenheit boundaries correctly`() {
-        assertEquals("32°", 0.0.toTempString(TemperatureUnit.FAHRENHEIT))
-        assertEquals("-40°", (-40.0).toTempString(TemperatureUnit.FAHRENHEIT))
-        assertEquals("212°", 100.0.toTempString(TemperatureUnit.FAHRENHEIT))
-        assertEquals("14°", (-10.0).toTempString(TemperatureUnit.FAHRENHEIT))
-        assertEquals("76°", 24.7.toTempString(TemperatureUnit.FAHRENHEIT))
+        // 后缀跟随所选单位:华氏必须出 °F,不得错标 °C
+        assertEquals("32°F", 0.0.toTempString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("-40°F", (-40.0).toTempString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("212°F", 100.0.toTempString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("14°F", (-10.0).toTempString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("76°F", 24.7.toTempString(TemperatureUnit.FAHRENHEIT))
     }
 
     @Test
     fun `toTempString handles large numeric values`() {
-        assertEquals("100°", 100.0.toTempString(TemperatureUnit.CELSIUS))
-        assertEquals("212°", 100.0.toTempString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("100°C", 100.0.toTempString(TemperatureUnit.CELSIUS))
+        assertEquals("212°F", 100.0.toTempString(TemperatureUnit.FAHRENHEIT))
     }
 
     @Test
@@ -235,9 +236,9 @@ class WeatherMapperTest {
 
     @Test
     fun `toFeelLikeString prefixes feel like label`() {
-        assertEquals("体感26°", 26.0.toFeelLikeString(TemperatureUnit.CELSIUS))
-        assertEquals("体感78°", 26.0.toFeelLikeString(TemperatureUnit.FAHRENHEIT))
-        assertEquals("体感23°", (-5.0).toFeelLikeString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("体感26°C", 26.0.toFeelLikeString(TemperatureUnit.CELSIUS))
+        assertEquals("体感78°F", 26.0.toFeelLikeString(TemperatureUnit.FAHRENHEIT))
+        assertEquals("体感23°F", (-5.0).toFeelLikeString(TemperatureUnit.FAHRENHEIT))
     }
 
     // ── formatFxDate 边界 ──
