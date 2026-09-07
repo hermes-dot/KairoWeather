@@ -66,7 +66,7 @@ fun SunArcCard(
                 val startX = 24.dp.toPx()
                 val endX = size.width - 24.dp.toPx()
                 val midX = (startX + endX) / 2
-                val topY = 12.dp.toPx()
+                val topY = 6.dp.toPx()
                 val bottomY = size.height - 30.dp.toPx()
 
                 // ── 1. 虚线弧轨 ──

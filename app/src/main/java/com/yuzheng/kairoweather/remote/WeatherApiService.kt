@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.remote
 
+import com.yuzheng.kairoweather.data.model.AirQualityResponse
 import com.yuzheng.kairoweather.data.model.GeoResponse
 import com.yuzheng.kairoweather.data.model.QWeatherDailyResponse
 import com.yuzheng.kairoweather.data.model.QWeatherHourlyResponse
@@ -9,6 +10,12 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface WeatherApiService {
+
+    @GET("/v7/air/now")
+    suspend fun getAirNow(
+        @Query("location") location: String,
+        @Query("lang") lang: String = "zh",
+    ): AirQualityResponse
 
     @GET("/geo/v2/city/lookup")
     suspend fun reverseGeocode(

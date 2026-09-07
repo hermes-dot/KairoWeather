@@ -2,6 +2,7 @@ package com.yuzheng.kairoweather.data.repository
 
 import com.yuzheng.kairoweather.data.mapper.toDomain
 import com.yuzheng.kairoweather.data.resultCatching
+import com.yuzheng.kairoweather.domain.model.AirQuality
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
 import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
@@ -44,6 +45,21 @@ class WeatherRepository @Inject constructor(private val api: WeatherApiService) 
                 val response = api.getDailyWeather(location = location)
                 if (response.code != "200") throw WeatherException.ApiError(response.code)
                 response.daily.mapIndexed { i, d -> d.toDomain(i) }
+            }
+        }
+
+    /**
+     * 实时空气质量。独立端点、独立配额,失败语义与 hourly/daily 一致——
+     * 由调用方静默处理,不影响主页面(AQI 卡缺席好过整页报错)。
+     */
+    suspend fun getAirQuality(location: String, forceRefresh: Boolean = false): Result<AirQuality> =
+        cached("$location|air", forceRefresh) {
+            resultCatching {
+                val response = api.getAirNow(location)
+                if (response.code != "200") throw WeatherException.ApiError(response.code)
+                val now = response.now ?: throw WeatherException.EmptyDataError()
+                // toDomain 只在 aqi 非数字时返回 null:按"无数据"处理,不谎报 0(优)
+                now.toDomain() ?: throw WeatherException.EmptyDataError()
             }
         }
 

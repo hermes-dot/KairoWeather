@@ -3,6 +3,9 @@ package com.yuzheng.kairoweather.data.mapper
 import com.yuzheng.kairoweather.data.model.QWeatherNow
 import com.yuzheng.kairoweather.data.model.QWeatherHourly
 import com.yuzheng.kairoweather.data.model.QWeatherDaily
+import com.yuzheng.kairoweather.data.model.QWeatherAirNow
+import com.yuzheng.kairoweather.domain.model.AirQuality
+import com.yuzheng.kairoweather.domain.model.categoryForAqi
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
 import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
@@ -34,6 +37,19 @@ fun QWeatherHourly.toDomain(): HourlyForecast {
         popPct = pop.toIntOrNull() ?: 0,
         isNow = false,
         rawTime = fxTime
+    )
+}
+
+/**
+ * 空气质量 DTO → domain。aqi 非数字时按"无数据"处理返回 null,由 Repository 转成
+ * EmptyDataError——不猜 0,因为 0 在 AQI 语义里是"最优",谎报比缺失更糟。
+ */
+fun QWeatherAirNow.toDomain(): AirQuality? {
+    val value = aqi.toIntOrNull() ?: return null
+    return AirQuality(
+        aqi = value.coerceIn(0, 500),
+        category = category.ifBlank { categoryForAqi(value) },
+        primaryPollutant = primary,
     )
 }
 

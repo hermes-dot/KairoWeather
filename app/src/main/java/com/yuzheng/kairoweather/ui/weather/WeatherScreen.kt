@@ -39,6 +39,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuzheng.kairoweather.R
+import com.yuzheng.kairoweather.ui.weather.components.AirQualityCard
 import com.yuzheng.kairoweather.ui.weather.components.DailyForecastList
 import com.yuzheng.kairoweather.ui.weather.components.HourlyForecastRow
 import com.yuzheng.kairoweather.ui.weather.components.HumidityCard
@@ -50,6 +51,7 @@ import com.yuzheng.kairoweather.ui.weather.components.WeatherHeader
 import com.yuzheng.kairoweather.ui.weather.components.WeatherTopBar
 import com.yuzheng.kairoweather.ui.weather.components.WindCard
 import com.yuzheng.kairoweather.ui.theme.weatherSkyGradient
+import com.yuzheng.kairoweather.ui.weather.components.WeekForecastChartCard
 
 @Composable
 fun WeatherScreen(
@@ -165,6 +167,18 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
                 )
             }
 
+            // ── 空气质量:当前环境信息排在未来预报之前;数据缺失则整卡缺席(P2-6 静默语义) ──
+            state.air?.let { air ->
+                item(key = "spacer_air_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
+                item(key = "air") {
+                    AirQualityCard(
+                        aqi = air.aqi,
+                        category = air.category,
+                        primaryPollutant = air.primaryPollutant,
+                    )
+                }
+            }
+
             // ── 逐小时 ──
             if (state.hourly.isNotEmpty()) {
                 item(key = "spacer_hourly_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
@@ -181,7 +195,7 @@ private fun WeatherContent(state: WeatherUiState, onRefresh: () -> Unit) {
             // ── 逐日预报 ──
             if (state.daily.isNotEmpty()) {
                 item(key = "spacer_daily_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
-                item(key = "daily") { DailyForecastList(state.daily, state.temperatureUnit) }
+                item(key = "daily") { WeekForecastChartCard(state.daily, state.temperatureUnit) }
             }
 
             item(key = "spacer_detail_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }

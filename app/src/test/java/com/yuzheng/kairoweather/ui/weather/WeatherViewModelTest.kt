@@ -4,6 +4,7 @@ import android.location.Location
 import com.yuzheng.kairoweather.data.location.LocationTracker
 import com.yuzheng.kairoweather.data.preferences.UserPreferences
 import com.yuzheng.kairoweather.data.repository.WeatherRepository
+import com.yuzheng.kairoweather.domain.model.AirQuality
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
 import com.yuzheng.kairoweather.domain.model.DailyForecast
 import com.yuzheng.kairoweather.domain.model.HourlyForecast
@@ -75,6 +76,15 @@ class WeatherViewModelTest {
             sunset = "19:00",
         ),
     )
+
+    private val air = AirQuality(aqi = 42, category = "优", primaryPollutant = "o3")
+
+    init {
+        // air 默认成功桩放 init 而非 viewModel() helper:有测试绕过 helper 直接构造 VM,
+        // strict mock 缺省会抛异常被 resultCatching 吞成 null——测试"假绿"。
+        // mockk 后写生效:失败路径用例在构造 VM 前自行 coEvery 覆盖本桩。
+        coEvery { repository.getAirQuality(any(), any()) } returns Result.success(air)
+    }
 
     private fun viewModel(unit: TemperatureUnit = TemperatureUnit.CELSIUS): WeatherViewModel {
         every { preferences.temperatureUnit } returns flowOf(unit)
@@ -381,6 +391,37 @@ class WeatherViewModelTest {
             assertEquals("api boom", vm.uiState.value.error)
             assertNull(vm.uiState.value.current)
             assertFalse(vm.uiState.value.isLoading)
+        }
+
+    @Test
+    fun `air loaded in parallel and exposed in state`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadingWeather("116.41,39.92")
+            advanceUntilIdle()
+
+            assertEquals(air, vm.uiState.value.air)
+            coVerify(exactly = 1) { repository.getAirQuality("116.41,39.92") }
+        }
+
+    @Test
+    fun `air failure stays silent and clears air without touching weather state`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            stubWeatherSuccess()
+            stubNameSuccess()
+            val vm = viewModel()
+            // 覆盖 init 里的默认 air 成功桩(mockk 后写生效,必须在 VM 构造之后打)
+            coEvery { repository.getAirQuality(any(), any()) } returns
+                Result.failure(Exception("air boom"))
+            vm.loadingWeather("116.41,39.92")
+            advanceUntilIdle()
+
+            // P2-6 静默语义:AQI 失败不写 error、不影响 current;air 置 null 即 AQI 卡不渲染
+            assertNull(vm.uiState.value.air)
+            assertNull(vm.uiState.value.error)
+            assertEquals(current, vm.uiState.value.current)
         }
 
     // ── 温度单位(P1-2:单位切换不重拉数据,仅 UI 层重格式化) ──

@@ -32,6 +32,7 @@ class WeatherUiStateTest {
         assertNull(state.current)
         assertTrue(state.hourly.isEmpty())
         assertTrue(state.daily.isEmpty())
+        assertNull(state.air)
         assertFalse(state.isLoading)
         assertNull(state.error)
         assertEquals(0f, state.sunProgress)
@@ -53,6 +54,7 @@ class WeatherUiStateTest {
         // 未指定字段保持默认值
         assertTrue(state.hourly.isEmpty())
         assertTrue(state.daily.isEmpty())
+        assertNull(state.air)
         assertEquals(0f, state.sunProgress)
         assertEquals("北京", state.locationName)
         assertEquals(TemperatureUnit.CELSIUS, state.temperatureUnit)
@@ -74,10 +76,14 @@ class WeatherUiStateTest {
         val hourly = listOf(
             HourlyForecast(time = "12:00", tempCelsius = 24.0, iconCode = "100", popPct = 10, isNow = true),
         )
+        val air = com.yuzheng.kairoweather.domain.model.AirQuality(
+            aqi = 42, category = "优", primaryPollutant = "o3",
+        )
         val state = WeatherUiState(
             current = current,
             hourly = hourly,
             daily = emptyList(),
+            air = air,
             isLoading = true,
             error = "err",
             sunProgress = 0.5f,
@@ -88,10 +94,11 @@ class WeatherUiStateTest {
         assertEquals(current, state.component1())
         assertEquals(hourly, state.component2())
         assertEquals(emptyList<HourlyForecast>(), state.component3())
-        assertTrue(state.component4())
-        assertEquals("err", state.component5())
-        assertEquals(0.5f, state.component6())
-        assertEquals("上海", state.component7())
-        assertEquals(TemperatureUnit.FAHRENHEIT, state.component8())
+        assertEquals(air, state.component4())
+        assertTrue(state.component5())
+        assertEquals("err", state.component6())
+        assertEquals(0.5f, state.component7())
+        assertEquals("上海", state.component8())
+        assertEquals(TemperatureUnit.FAHRENHEIT, state.component9())
     }
 }

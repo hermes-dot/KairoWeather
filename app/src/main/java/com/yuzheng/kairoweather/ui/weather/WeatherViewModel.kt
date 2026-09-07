@@ -113,16 +113,28 @@ class WeatherViewModel @Inject constructor(
         val currentJob = launch { loadCurrent(location, forceRefresh) }
         val hourlyJob = launch { loadHourly(location, forceRefresh) }
         val dailyJob = launch { loadDaily(location, forceRefresh) }
+        val airJob = launch { loadAir(location, forceRefresh) }
 
-        currentJob.join(); hourlyJob.join(); dailyJob.join()
+        currentJob.join(); hourlyJob.join(); dailyJob.join(); airJob.join()
     }
 
     private suspend fun loadCurrent(location: String, forceRefresh: Boolean = false) {
         repository.getCurrentWeather(location, forceRefresh)
             .onSuccess { _uiState.update { s -> s.copy(current = it) } }
             // P2-6: error 仅由 current 请求写入,整页错误只反映当前天气失败;
-            // hourly/daily 失败保持静默,不覆盖已加载的数据。
+            // hourly/daily/air 失败保持静默,不覆盖已加载的数据。
             .onFailure { _uiState.update { s -> s.copy(error = it.message) } }
+    }
+
+    /**
+     * 空气质量与主天气同批并行加载(P2-6 静默语义延伸):失败只意味着 AQI 卡不渲染。
+     * 切换城市成功前旧值保留会造成"新城市+旧 AQI"的错位,故成功即整体替换、
+     * 失败清空——缺席诚实,错配撒谎。
+     */
+    private suspend fun loadAir(location: String, forceRefresh: Boolean = false) {
+        repository.getAirQuality(location, forceRefresh)
+            .onSuccess { air -> _uiState.update { s -> s.copy(air = air) } }
+            .onFailure { _uiState.update { s -> s.copy(air = null) } }
     }
 
     private suspend fun loadHourly(location: String, forceRefresh: Boolean = false) {
