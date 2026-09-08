@@ -1,6 +1,7 @@
 package com.yuzheng.kairoweather.di
 
 import com.yuzheng.kairoweather.BuildConfig
+import com.yuzheng.kairoweather.data.PerfLog
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.yuzheng.kairoweather.remote.WeatherApiService
 import dagger.Module
@@ -43,6 +44,14 @@ object NetworkModule {
                     // 请求行与头,保留调试所需的关键信息同时不输出响应体数据。
                     level = HttpLoggingInterceptor.Level.HEADERS
                 })
+                // 临时诊断(ColorOS 压 logcat):每请求耗时落盘 perf.log,排查完删
+                addInterceptor { chain ->
+                    val req = chain.request()
+                    val t = System.currentTimeMillis()
+                    val resp = chain.proceed(req)
+                    PerfLog.log("HTTP ${req.url.encodedPath} ${resp.code} ${System.currentTimeMillis() - t}ms")
+                    resp
+                }
             }
         }
         .addInterceptor { chain ->

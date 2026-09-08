@@ -200,7 +200,9 @@ private fun WindCardPreview() {
             angle = "45",
             speed = "10",
             scale = "3",
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         )
     }
 }
@@ -214,7 +216,17 @@ private fun WindCardDarkPreview() {
             angle = "315",
             speed = "12",
             scale = "4",
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PressureCardPreview() {
+    KairoWeatherTheme {
+        PressureCard(1011, modifier = Modifier.padding(12.dp))
     }
 }

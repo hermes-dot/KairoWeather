@@ -91,6 +91,11 @@ class WeatherViewModelTest {
         return WeatherViewModel(repository, locationTracker, preferences)
     }
 
+    /** 分段式首屏会先探 getCachedLocation:无缓存用例显式给 null,strict mock 缺省会抛。 */
+    private fun stubNoCachedLocation() {
+        coEvery { locationTracker.getCachedLocation() } returns null
+    }
+
     /** sealed 后的统一读取口:非 Ready 即测试失败,失败信息带实际态。 */
     private fun ready(vm: WeatherViewModel): WeatherUiState.Ready =
         vm.uiState.value as? WeatherUiState.Ready
@@ -136,6 +141,7 @@ class WeatherViewModelTest {
     fun `loadFromCurrentLocation loads weather and resolves location name`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
             val location = mockLocation()
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returns Result.success(location)
             every { locationTracker.formatLocation(location) } returns "116.41,39.90"
             coEvery { repository.reverseGeocode("116.41,39.90") } returns Result.success("北京")
@@ -162,6 +168,7 @@ class WeatherViewModelTest {
     @Test
     fun `location failure falls back to default location`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returns
                 Result.failure(SecurityException("permission denied"))
             coEvery { repository.reverseGeocode(WeatherViewModel.DEFAULT_LOCATION) } returns
@@ -198,6 +205,7 @@ class WeatherViewModelTest {
             val location = mockLocation()
             coEvery { locationTracker.getCurrentLocation() } returns Result.success(location)
             every { locationTracker.formatLocation(location) } returns "116.41,39.90"
+            stubNoCachedLocation()
             coEvery { repository.reverseGeocode(any()) } returns Result.failure(Exception("geo down"))
             stubWeatherSuccess()
 
@@ -291,6 +299,7 @@ class WeatherViewModelTest {
 
     @Test
     fun `loadFromCurrentLocation shows loading and guards re-entry`(): Unit = runTest(mainDispatcherRule.testDispatcher) {
+            stubNoCachedLocation()
             val gate = CompletableDeferred<Result<Location>>()
             coEvery { locationTracker.getCurrentLocation() } coAnswers { gate.await() }
             coEvery { repository.reverseGeocode(any()) } returns Result.success("北京")
@@ -556,6 +565,7 @@ class WeatherViewModelTest {
                 every { longitude } returns 121.4737
                 every { time } returns System.currentTimeMillis()
             }
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returnsMany
                 listOf(Result.success(beijing), Result.success(shanghai))
             every { locationTracker.formatLocation(beijing) } returns "116.41,39.90"
@@ -582,6 +592,7 @@ class WeatherViewModelTest {
     fun `recheck keeps current city when movement stays below threshold`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
             val loc = mockLocation()
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returns Result.success(loc)
             every { locationTracker.formatLocation(loc) } returns "116.41,39.90"
             // 市内通勤/漂移:同一点返回 5km
@@ -608,6 +619,7 @@ class WeatherViewModelTest {
             // 初定位失败(冷启动无信号)回退默认城市后,回前台复查不得因"无锚点"
             // 永久跳过——否则页面钉死默认城市,正是本 bug 的第三种表现。
             val loc = mockLocation()
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returnsMany listOf(
                 Result.failure(IllegalStateException("定位超时,请重试")),
                 Result.success(loc),
@@ -632,6 +644,7 @@ class WeatherViewModelTest {
     @Test
     fun `recheck stays silent when re-location fails again`(): Unit =
         runTest(mainDispatcherRule.testDispatcher) {
+            stubNoCachedLocation()
             coEvery { locationTracker.getCurrentLocation() } returns
                 Result.failure(IllegalStateException("定位超时,请重试"))
             stubWeatherSuccess()
@@ -666,5 +679,99 @@ class WeatherViewModelTest {
             // 手动选城无定位锚点:复查不得触碰定位,用户选择不能被"抢回去"
             coVerify(exactly = 0) { locationTracker.getCurrentLocation() }
             coVerify(exactly = 1) { repository.getCurrentWeather("1.00,2.00") }
+        }
+
+    // ── 分段式首屏与刷新重定位(实测:主动定位室内可挂满 15s,首屏不同步等它) ──
+
+    @Test
+    fun `stale cached fix renders instantly then refines via recheck`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val stale = mockLocation().apply {
+                every { time } returns System.currentTimeMillis() - 60 * 60_000L
+            }
+            val shanghai = mockk<Location>().apply {
+                every { latitude } returns 31.2304
+                every { longitude } returns 121.4737
+                every { time } returns System.currentTimeMillis()
+            }
+            coEvery { locationTracker.getCachedLocation() } returns stale
+            coEvery { locationTracker.getCurrentLocation() } returns Result.success(shanghai)
+            every { locationTracker.formatLocation(stale) } returns "116.41,39.90"
+            every { locationTracker.formatLocation(shanghai) } returns "121.47,31.23"
+            every { locationTracker.distanceMeters(stale, shanghai) } returns 1_000_000f
+            stubWeatherSuccess()
+            coEvery { repository.reverseGeocode(any()) } returns Result.success("城市")
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+
+            // 首屏用缓存坐标出内容;过期 → 同一轮里自动后台复查精修到新坐标
+            coVerify(exactly = 1) { repository.getCurrentWeather("116.41,39.90") }
+            coVerify(exactly = 1) { repository.getCurrentWeather("121.47,31.23") }
+        }
+
+    @Test
+    fun `fresh cached fix renders without any recheck`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val fresh = mockLocation() // time=now → 过新鲜度门槛
+            coEvery { locationTracker.getCachedLocation() } returns fresh
+            every { locationTracker.formatLocation(fresh) } returns "116.41,39.90"
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+
+            coVerify(exactly = 1) { repository.getCurrentWeather("116.41,39.90") }
+            coVerify(exactly = 0) { locationTracker.getCurrentLocation() }
+        }
+
+    @Test
+    fun `refresh in location mode re-locates before fetching`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val loc = mockLocation()
+            stubNoCachedLocation()
+            coEvery { locationTracker.getCurrentLocation() } returns Result.success(loc)
+            every { locationTracker.formatLocation(loc) } returns "121.47,31.23"
+            every { locationTracker.distanceMeters(any(), any()) } returns 5_000f
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+
+            vm.refresh()
+            advanceUntilIdle()
+
+            // 定位模式下刷新前重新定位:换城后下拉刷新刷的是新坐标而非旧城市
+            coVerify(exactly = 2) { locationTracker.getCurrentLocation() }
+            coVerify(exactly = 2) { repository.getCurrentWeather("121.47,31.23", any()) }
+        }
+
+    @Test
+    fun `refresh falls back to old coords when re-location fails`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val loc = mockLocation()
+            stubNoCachedLocation()
+            coEvery { locationTracker.getCurrentLocation() } returnsMany listOf(
+                Result.success(loc),
+                Result.failure(IllegalStateException("定位超时,请重试")),
+            )
+            every { locationTracker.formatLocation(loc) } returns "116.41,39.90"
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+
+            // 刷新时定位失败:留在旧坐标完成刷新,不因此进 Failed
+            vm.refresh()
+            advanceUntilIdle()
+            coVerify(exactly = 2) { repository.getCurrentWeather("116.41,39.90", any()) }
+            assertTrue(vm.uiState.value is WeatherUiState.Ready)
         }
 }

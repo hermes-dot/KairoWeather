@@ -5,7 +5,7 @@
     <dimen name="card_grid_spacing">8dp</dimen>
     <dimen name="card_icon_size">32dp</dimen>
     <dimen name="card_label_spacing">8dp</dimen>
-    <dimen name="card_value_spacing">4dp</dimen>
+    <dimen name="card_value_spacing">8dp</dimen>
 
     <!-- 页面 -->
     <dimen name="page_horizontal_padding">16dp</dimen>

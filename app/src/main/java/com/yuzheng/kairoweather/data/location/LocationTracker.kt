@@ -5,6 +5,7 @@ import android.location.Location
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.Task
+import com.yuzheng.kairoweather.data.PerfLog
 import com.yuzheng.kairoweather.data.resultCatching
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
@@ -38,19 +39,35 @@ class LocationTracker @Inject constructor(
         }
     }
 
+    /**
+     * 不做新鲜度检查的 lastKnown:首屏"立即有内容"专用——主动定位在室内/个别
+     * ROM 上可能慢到超时(实测 15s),白屏干等比先看旧数据差得多。
+     */
+    @SuppressLint("MissingPermission")
+    suspend fun getCachedLocation(): Location? =
+        resultCatching { awaitLocation(fusedClient.lastLocation) }.getOrNull()
+
+    /** 纯主动定位(不查缓存):首屏的分段后台精修用;失败/超时归调用方处理。 */
+    @SuppressLint("MissingPermission")
+    suspend fun getActiveFix(): Result<Location> = resultCatching {
+        withTimeoutOrNull(ACTIVE_LOCATION_TIMEOUT_MS) {
+            awaitLocation(fusedClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null))
+        } ?: throw IllegalStateException("定位超时,请重试")
+    }
+
     @SuppressLint("MissingPermission") // 权限由调用方在 UI 层处理
     suspend fun getCurrentLocation(): Result<Location> {
         // 优先使用最近一次已知位置(快、省电),但必须过了新鲜度门槛
-        val lastKnown = resultCatching { awaitLocation(fusedClient.lastLocation) }.getOrNull()
+        val t0 = System.currentTimeMillis()
+        val lastKnown = getCachedLocation()
+        PerfLog.log("lastKnown task: ${System.currentTimeMillis() - t0}ms" +
+            (lastKnown?.let { " age=${System.currentTimeMillis() - it.time}ms fresh=${isFresh(it.time)}" } ?: " null"))
         if (lastKnown != null && isFresh(lastKnown.time)) return Result.success(lastKnown)
 
         // 冷启动 lastLocation 通常为 null、或已过期(用户可能已换城):走主动定位。
         // resultCatching 会把 Task 失败转为 Result.failure,同时保证协程取消信号不被吞。
-        val active = resultCatching {
-            withTimeoutOrNull(ACTIVE_LOCATION_TIMEOUT_MS) {
-                awaitLocation(fusedClient.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null))
-            } ?: throw IllegalStateException("定位超时,请重试")
-        }
+        val active = getActiveFix()
+        PerfLog.log("active fix: ${System.currentTimeMillis() - t0}ms success=${active.isSuccess}")
         if (active.isSuccess || lastKnown == null) return active
         // 主动定位失败时,陈旧定位仍好过整页回退默认城市(旧坐标至少曾是真实位置)
         return Result.success(lastKnown)

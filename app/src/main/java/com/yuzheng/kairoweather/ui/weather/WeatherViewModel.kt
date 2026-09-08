@@ -3,6 +3,7 @@ package com.yuzheng.kairoweather.ui.weather
 import android.location.Location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.yuzheng.kairoweather.data.PerfLog
 import com.yuzheng.kairoweather.data.location.LocationTracker
 import com.yuzheng.kairoweather.data.preferences.UserPreferences
 import com.yuzheng.kairoweather.data.repository.WeatherRepository
@@ -91,6 +92,13 @@ class WeatherViewModel @Inject constructor(
      */
     private var pendingCityName: String? = null
 
+    /**
+     * 首屏加载(分段式):有任意 lastKnown 就立刻用它渲染,新鲜度不够时后台
+     * 再走换城复查精修——实测本机主动定位室内可能挂满 15s 超时,首屏同步等它
+     * 就是"十秒白屏"(vivo/ColorOS,室内 BALANCED 定位)。旧坐标哪怕过期也
+     * "曾经真实":先出内容再静默校准,严格优于干等。无任何缓存(真·冷启动)
+     * 才退回同步主动定位。
+     */
     fun loadFromCurrentLocation() {
         if (inFlight) return
         inFlight = true
@@ -98,6 +106,22 @@ class WeatherViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 markLoading()
+                val cached = locationTracker.getCachedLocation()
+                if (cached != null) {
+                    PerfLog.log("instant render cached age=${System.currentTimeMillis() - cached.time}ms")
+                    lastFix = cached
+                    val coords = locationTracker.formatLocation(cached)
+                    lastLocation = coords
+                    runLoad(coords, forceRefresh = false)
+                    clearIndicator()
+                    // 后台精修 = 一次换城复查(锚点是刚用的缓存坐标,静默、越阈值才切城)。
+                    // 先 launch 再 return:父协程 finally 释放 inFlight 后子协程才会执行,
+                    // 复查守卫必然放行;精修期间用户下拉刷新也不被占用。
+                    if (!LocationTracker.isFresh(cached.time)) {
+                        viewModelScope.launch { recheckLocationIfMoved() }
+                    }
+                    return@launch
+                }
                 locationTracker.getCurrentLocation()
                     .onSuccess { loc ->
                         lastFix = loc
@@ -267,6 +291,7 @@ class WeatherViewModel @Inject constructor(
      * (旧数据可看,好过把内容打回错误页)。
      */
     private suspend fun loadWeatherInternal(location: String, forceRefresh: Boolean) {
+        val t0 = System.currentTimeMillis() // 诊断日志(临时)
         // 具名而非 List:异构 Result<T> 塞进一个 list 会擦除成 Any
         val (currentRes, hourlyRes, dailyRes, airRes) = coroutineScope {
             val now = async { repository.getCurrentWeather(location, forceRefresh) }
@@ -296,6 +321,7 @@ class WeatherViewModel @Inject constructor(
         val sunProgress = calcSunProgress(daily.firstOrNull()?.sunrise, daily.firstOrNull()?.sunset)
 
         _uiState.update { s ->
+            PerfLog.log("4-path done: ${System.currentTimeMillis() - t0}ms")
             if (s is WeatherUiState.Ready) {
                 // 原地刷新:locationName 由反查流自行维护(isRefreshing 由入口管),此处不碰
                 s.copy(

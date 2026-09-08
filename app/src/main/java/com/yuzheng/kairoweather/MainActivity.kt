@@ -23,7 +23,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-
         setContent {
             // produceState 挂起首帧直到 DataStore 出值(防闪变),并持续 collect 响应切换;
             // 主题已枚举化(批次C),ThemeMode.SYSTEM 仅作读取前的初始占位。

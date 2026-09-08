@@ -187,7 +187,12 @@ private fun WeatherContent(
                 .padding(horizontal = dimensionResource(R.dimen.page_horizontal_padding)),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            item(key = "topbar") { WeatherTopBar(locationName = state.locationName, onRefresh = onRefresh) }
+            item(key = "topbar") {
+                WeatherTopBar(
+                    locationName = state.locationName,
+                    onRefresh = onRefresh
+                )
+            }
 
             item(key = "header") {
                 WeatherHeader(
@@ -217,7 +222,9 @@ private fun WeatherContent(
                 item(key = "hourly_title") {
                     Text(
                         "逐小时预报", style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = dimensionResource(R.dimen.page_horizontal_padding)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = dimensionResource(R.dimen.page_horizontal_padding)),
                     )
                 }
                 item(key = "spacer_hourly_mid") { Spacer(Modifier.height(8.dp)) }
@@ -246,17 +253,31 @@ private fun WeatherContent(
                             weather.windAngle,
                             weather.windSpeedRaw,
                             weather.windScale,
-                            Modifier.weight(1f).height(120.dp),
+                            Modifier
+                                .weight(1f)
+                                .height(120.dp),
                         )
-                        HumidityCard(weather.humidityPct, Modifier.weight(1f).height(120.dp))
+                        HumidityCard(
+                            weather.humidityPct, Modifier
+                                .weight(1f)
+                                .height(120.dp)
+                        )
                     }
                     Row(
                         Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(dimensionResource(R.dimen.card_grid_spacing)),
                     ) {
-                        PressureCard(weather.pressureHpa, Modifier.weight(1f).height(120.dp))
+                        PressureCard(
+                            weather.pressureHpa, Modifier
+                                .weight(1f)
+                                .height(120.dp)
+                        )
                         dailyFirst?.let {
-                            UvIndexCard(it.uvIndexValue, Modifier.weight(1f).height(120.dp))
+                            UvIndexCard(
+                                it.uvIndexValue, Modifier
+                                    .weight(1f)
+                                    .height(120.dp)
+                            )
                         }
                     }
                     dailyFirst?.moonPhase?.emoji?.let {
@@ -273,9 +294,25 @@ private fun WeatherContent(
             if (dailyFirst != null && dailyFirst.sunrise.isNotEmpty()) {
                 item(key = "spacer_sun_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
                 item(key = "sun") {
-                    SunArcCard(dailyFirst.sunrise, dailyFirst.sunset, state.sunProgress, Modifier.fillMaxWidth())
+                    SunArcCard(
+                        dailyFirst.sunrise,
+                        dailyFirst.sunset,
+                        state.sunProgress,
+                        Modifier.fillMaxWidth()
+                    )
                 }
             }
+
+            item { Spacer(modifier = Modifier.height(4.dp)) }
+
+            item(key = "resource") {
+                Text(
+                    "数据来自和风天气",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
 
             item(key = "spacer_bottom") { Spacer(Modifier.height(32.dp)) }
         }
