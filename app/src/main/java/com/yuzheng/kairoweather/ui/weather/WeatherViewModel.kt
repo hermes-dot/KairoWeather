@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.weather
 
+import android.location.Location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yuzheng.kairoweather.data.location.LocationTracker
@@ -40,6 +41,14 @@ class WeatherViewModel @Inject constructor(
          * 指示器也至少停留该时长,保证用户可感知刷新已触发。
          */
         private const val MIN_REFRESH_INDICATOR_MS = 500L
+
+        /**
+         * 换城判定阈值(米):回前台复查时,新定位与上次锚点位移超过 20km 才重新拉取。
+         * 阈值要同时躲开两头的坑——GPS 漂移与市内通勤(地铁跨区约十几公里)不该反复
+         * 触发重载,而高铁/航班换城动辄上百公里必然越线。宁可市内多刷一次,
+         * 也不放走真换城:缓存 key 含坐标,同坐标重拉会命中 TTL,配额开销有限。
+         */
+        private const val CITY_SWITCH_THRESHOLD_M = 20_000f
     }
 
     private val _uiState = MutableStateFlow<WeatherUiState>(WeatherUiState.Loading)
@@ -54,6 +63,20 @@ class WeatherViewModel @Inject constructor(
     val temperatureUnit: Flow<TemperatureUnit> = preferences.temperatureUnit
 
     private var lastLocation: String = DEFAULT_LOCATION
+
+    /**
+     * 当前展示坐标对应的原始定位对象(换城复查的比较锚点)。只保留经纬度、不保留
+     * provider/精度等字段:复查只关心"离上次位置多远"。搜索/手动选城没有定位对象,置 null。
+     */
+    private var lastFix: Location? = null
+
+    /**
+     * 当前城市是否来自用户手动选城(含权限被拒后显式回退默认城市)。
+     * 定位模式(false)下,下拉刷新与回前台复查都可以静默重定位;
+     * 手动模式(true)下定位结果永远不得覆盖用户选择——不能只靠 lastFix==null
+     * 区分,因为"定位失败回退默认城市"同样是 lastFix==null,却必须允许后续自救。
+     */
+    private var manualCity = false
 
     /**
      * 防重入旗标:覆盖"定位+地名反查+四路天气"的完整流程。
@@ -71,17 +94,20 @@ class WeatherViewModel @Inject constructor(
     fun loadFromCurrentLocation() {
         if (inFlight) return
         inFlight = true
+        manualCity = false
         viewModelScope.launch {
             try {
                 markLoading()
                 locationTracker.getCurrentLocation()
                     .onSuccess { loc ->
+                        lastFix = loc
                         val coords = locationTracker.formatLocation(loc)
                         lastLocation = coords
                         runLoad(coords, forceRefresh = false)
                     }
                     .onFailure {
                         // 定位失败时回退到默认城市,保证页面可用
+                        lastFix = null
                         lastLocation = DEFAULT_LOCATION
                         runLoad(DEFAULT_LOCATION, forceRefresh = false)
                     }
@@ -92,9 +118,51 @@ class WeatherViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 换城复查:App 回到前台时调用。用户坐高铁/飞机去了别的城市,页面不该继续
+     * 显示初定位钉死的旧城市(初定位钉死 bug 的另一半:即便定位是新的,加载入口
+     * 只在 LaunchedEffect(Unit) 触发一次,回前台不会重新定位)。
+     *
+     * 与 loadFromCurrentLocation 的关键区别是**静默**:
+     * - 不 markLoading——旧城市数据在复查期间继续可看,只有确认换城才整页切换,
+     *   否则每次回前台都白屏转圈,比"偶尔晚一屏"更糟;
+     * - 定位失败/未越阈值都原样保留当前展示,不打扰用户;
+     * - 复查本身不消耗下拉刷新指示器,走 forceRefresh=false,坐标变了必然未命中缓存。
+     *
+     * 手动选城(manualCity)时跳过:用户明确选的城不能被定位"抢回去"。
+     * 定位失败回退默认城市**不算**手动——锚点为 null 时照常重定位,
+     * 定位服务恢复后页面自动切回真实位置,而非永久钉死在默认城市。
+     */
+    fun recheckLocationIfMoved() {
+        if (inFlight || manualCity) return
+        inFlight = true
+        viewModelScope.launch {
+            try {
+                val fresh = locationTracker.getCurrentLocation().getOrNull() ?: return@launch
+                val anchor = lastFix
+                // 锚点存在且未越阈值:市内通勤/GPS 漂移不打扰;锚点为 null 时
+                // 这次成功定位就是自救,直接采纳。
+                if (anchor != null &&
+                    locationTracker.distanceMeters(anchor, fresh) < CITY_SWITCH_THRESHOLD_M
+                ) return@launch
+                lastFix = fresh
+                val coords = locationTracker.formatLocation(fresh)
+                lastLocation = coords
+                markLoading()
+                runLoad(coords, forceRefresh = false)
+                clearIndicator()
+            } finally {
+                inFlight = false
+            }
+        }
+    }
+
     fun loadingWeather(location: String) {
         if (inFlight) return
         inFlight = true
+        // 手动坐标:撤销定位锚点并进入手动模式,复查/刷新都不应用定位覆盖用户选择
+        lastFix = null
+        manualCity = true
         lastLocation = location
         viewModelScope.launch {
             try {
@@ -111,6 +179,9 @@ class WeatherViewModel @Inject constructor(
      * 下拉刷新/错误重试:强制回源(forceRefresh = true 绕过 TTL 缓存),并保证指示器
      * 至少展示 [MIN_REFRESH_INDICATOR_MS] 毫秒,避免缓存命中/瞬时返回时一闪而过。
      * 最小延迟在 clearIndicator 之前等待——指示器时长才是这段延迟的存在意义。
+     *
+     * 定位模式下刷新前先静默重定位:换城后下拉刷新是最自然的"更新"动作,
+     * 若只重拉旧坐标,刷出来的仍是旧城市(初定位钉死 bug 的第三种表现)。
      */
     fun refresh() {
         if (inFlight) return
@@ -119,7 +190,8 @@ class WeatherViewModel @Inject constructor(
             try {
                 markLoading()
                 val start = System.currentTimeMillis()
-                runLoad(lastLocation, forceRefresh = true)
+                val target = if (manualCity) lastLocation else resolveRefreshCoords()
+                runLoad(target, forceRefresh = true)
                 val elapsed = System.currentTimeMillis() - start
                 if (elapsed < MIN_REFRESH_INDICATOR_MS) {
                     delay(MIN_REFRESH_INDICATOR_MS - elapsed)
@@ -129,6 +201,19 @@ class WeatherViewModel @Inject constructor(
                 inFlight = false
             }
         }
+    }
+
+    /**
+     * 刷新前的静默重定位:成功则把展示坐标与锚点一起切到新位置(刷新本就整页
+     * 转圈,换城不额外闪屏);失败则留在旧坐标——指示器已经在转,不能因定位
+     * 服务抖动把这次刷新变成 Failed。
+     */
+    private suspend fun resolveRefreshCoords(): String {
+        val fresh = locationTracker.getCurrentLocation().getOrNull() ?: return lastLocation
+        lastFix = fresh
+        val coords = locationTracker.formatLocation(fresh)
+        lastLocation = coords
+        return coords
     }
 
     /**

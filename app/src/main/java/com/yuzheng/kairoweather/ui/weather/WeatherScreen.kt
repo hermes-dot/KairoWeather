@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuzheng.kairoweather.R
 import com.yuzheng.kairoweather.domain.model.TemperatureUnit
@@ -64,6 +68,7 @@ fun WeatherScreen(
         initialValue = TemperatureUnit.CELSIUS,
     )
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
@@ -92,6 +97,20 @@ fun WeatherScreen(
                 )
             )
         }
+    }
+
+    // 换城复查:每次回到前台(ON_RESUME)静默比对最新定位与当前展示锚点,
+    // 位移越阈值才整页切换城市;初定位失败过(无锚点)时,这次成功定位即自救
+    // (见 WeatherViewModel.recheckLocationIfMoved)。观察者注册时当前态即为
+    // RESUMED 会立即回调一次——初始定位在途时被 inFlight 挡下,无副作用。
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.recheckLocationIfMoved()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Surface(

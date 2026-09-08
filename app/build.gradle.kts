@@ -97,6 +97,8 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     // ViewModel Compose
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    // collectAsStateWithLifecycle / LocalLifecycleOwner(此前仅靠传递依赖,显式声明)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     // Location
     implementation(libs.play.services.location)
     // Navigation

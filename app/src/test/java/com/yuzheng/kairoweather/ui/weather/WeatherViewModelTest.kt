@@ -111,6 +111,8 @@ class WeatherViewModelTest {
     private fun mockLocation(): Location = mockk<Location>().apply {
         every { latitude } returns 39.9042
         every { longitude } returns 116.4074
+        // 新逻辑会读 Location.time 做新鲜度判定:默认给"刚刚定位",避免 strict mock 缺省抛错
+        every { time } returns System.currentTimeMillis()
     }
 
     private fun calcSunProgress(viewModel: WeatherViewModel, rise: String?, set: String?): Float {
@@ -540,5 +542,129 @@ class WeatherViewModelTest {
             advanceUntilIdle()
 
             assertTrue(ready(vm).sunProgress in 0f..1f)
+        }
+
+    // ── 换城复查(回前台 recheckLocationIfMoved) ──
+
+    /** 北京锚点 + 上海新定位,越阈值时复查应整页切到新坐标 */
+    @Test
+    fun `recheck switches city when moved beyond threshold`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val beijing = mockLocation()
+            val shanghai = mockk<Location>().apply {
+                every { latitude } returns 31.2304
+                every { longitude } returns 121.4737
+                every { time } returns System.currentTimeMillis()
+            }
+            coEvery { locationTracker.getCurrentLocation() } returnsMany
+                listOf(Result.success(beijing), Result.success(shanghai))
+            every { locationTracker.formatLocation(beijing) } returns "116.41,39.90"
+            every { locationTracker.formatLocation(shanghai) } returns "121.47,31.23"
+            every { locationTracker.distanceMeters(beijing, shanghai) } returns 1_000_000f
+            stubWeatherSuccess()
+            coEvery { repository.reverseGeocode("116.41,39.90") } returns Result.success("北京")
+            coEvery { repository.reverseGeocode("121.47,31.23") } returns Result.success("上海")
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+            assertEquals("北京", ready(vm).locationName)
+
+            vm.recheckLocationIfMoved()
+            advanceUntilIdle()
+
+            // 新坐标完成整页加载,地名随反查更新
+            coVerify(exactly = 1) { repository.getCurrentWeather("121.47,31.23") }
+            assertEquals("上海", ready(vm).locationName)
+        }
+
+    @Test
+    fun `recheck keeps current city when movement stays below threshold`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            val loc = mockLocation()
+            coEvery { locationTracker.getCurrentLocation() } returns Result.success(loc)
+            every { locationTracker.formatLocation(loc) } returns "116.41,39.90"
+            // 市内通勤/漂移:同一点返回 5km
+            every { locationTracker.distanceMeters(any(), any()) } returns 5_000f
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+
+            vm.recheckLocationIfMoved()
+            advanceUntilIdle()
+
+            // 未越阈值:不追发任何天气请求,页面保持原状且不闪 Loading
+            coVerify(exactly = 1) { repository.getCurrentWeather("116.41,39.90") }
+            assertTrue(vm.uiState.value is WeatherUiState.Ready)
+            assertFalse(ready(vm).isRefreshing)
+        }
+
+    @Test
+    fun `recheck recovers to real city when location service comes back`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            // 初定位失败(冷启动无信号)回退默认城市后,回前台复查不得因"无锚点"
+            // 永久跳过——否则页面钉死默认城市,正是本 bug 的第三种表现。
+            val loc = mockLocation()
+            coEvery { locationTracker.getCurrentLocation() } returnsMany listOf(
+                Result.failure(IllegalStateException("定位超时,请重试")),
+                Result.success(loc),
+            )
+            every { locationTracker.formatLocation(loc) } returns "116.41,39.90"
+            stubWeatherSuccess()
+            coEvery { repository.reverseGeocode(any()) } returns Result.success("北京")
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+            coVerify(exactly = 1) { repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION) }
+
+            vm.recheckLocationIfMoved()
+            advanceUntilIdle()
+
+            // 自救:成功定位后整页切到真实坐标
+            coVerify(exactly = 1) { repository.getCurrentWeather("116.41,39.90") }
+            assertEquals("北京", ready(vm).locationName)
+        }
+
+    @Test
+    fun `recheck stays silent when re-location fails again`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            coEvery { locationTracker.getCurrentLocation() } returns
+                Result.failure(IllegalStateException("定位超时,请重试"))
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadFromCurrentLocation()
+            advanceUntilIdle()
+            coVerify(exactly = 1) { repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION) }
+
+            // 复查再失败:不追发任何天气请求,页面保持原状
+            vm.recheckLocationIfMoved()
+            advanceUntilIdle()
+            coVerify(exactly = 2) { locationTracker.getCurrentLocation() }
+            coVerify(exactly = 1) { repository.getCurrentWeather(WeatherViewModel.DEFAULT_LOCATION) }
+        }
+
+    @Test
+    fun `recheck never overrides manually selected city`(): Unit =
+        runTest(mainDispatcherRule.testDispatcher) {
+            coEvery { locationTracker.getCurrentLocation() } returns Result.success(mockLocation())
+            stubWeatherSuccess()
+            stubNameSuccess()
+
+            val vm = viewModel()
+            vm.loadingWeather("1.00,2.00")
+            advanceUntilIdle()
+
+            vm.recheckLocationIfMoved()
+            advanceUntilIdle()
+
+            // 手动选城无定位锚点:复查不得触碰定位,用户选择不能被"抢回去"
+            coVerify(exactly = 0) { locationTracker.getCurrentLocation() }
+            coVerify(exactly = 1) { repository.getCurrentWeather("1.00,2.00") }
         }
 }
