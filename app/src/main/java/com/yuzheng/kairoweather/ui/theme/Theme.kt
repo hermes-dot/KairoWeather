@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -8,8 +9,11 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import com.yuzheng.kairoweather.domain.model.ThemeMode
 
 private val LightColorScheme = lightColorScheme(
@@ -106,6 +110,20 @@ fun KairoWeatherTheme(
 
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
+    }
+
+    // 系统栏图标对比度跟随 App 实际主题:enableEdgeToEdge 只按"系统深色开关"决定
+    // 图标深浅,用户在设置里手动选浅色/深色时二者会拧着——浅蓝渐变上压浅色图标
+    // (或夜蓝上压深色)直接看不见。渐变顶部:浅色=浅蓝底要深色图标,深色反之。
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window ?: return@SideEffect
+            WindowCompat.getInsetsController(window, view).apply {
+                isAppearanceLightStatusBars = !darkTheme
+                isAppearanceLightNavigationBars = !darkTheme
+            }
+        }
     }
 
     MaterialTheme(

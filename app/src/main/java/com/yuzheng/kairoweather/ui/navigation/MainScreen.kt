@@ -1,5 +1,6 @@
 package com.yuzheng.kairoweather.ui.navigation
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -24,6 +25,12 @@ fun MainScreen() {
     val currentRoute = backStackEntry?.destination?.route
 
     Scaffold(
+        // content 顶到窗口 y=0:天气页渐变才能穿到状态栏后。
+        // 默认 safeDrawing 会把 content 下推一个状态栏高度,而页面顶部 TopAppBar
+        // 自身又吃一份 statusBars insets——双重叠加后标题距屏幕顶 2×状态栏高,
+        // 渐变被推下、状态栏带只剩 window 底色(实机表现为不透明黑带)。
+        // 顶部 insets 由各屏 TopAppBar(windowInsets 默认)自管,底部由 NavigationBar 自管。
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
             NavigationBar {
                 Screen.bottomNavItems.forEach { screen ->
