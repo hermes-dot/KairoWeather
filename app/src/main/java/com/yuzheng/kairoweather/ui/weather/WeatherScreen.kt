@@ -208,11 +208,7 @@ private fun WeatherContent(
             state.air?.let { air ->
                 item(key = "spacer_air_top") { Spacer(Modifier.height(dimensionResource(R.dimen.section_spacing))) }
                 item(key = "air") {
-                    AirQualityCard(
-                        aqi = air.aqi,
-                        category = air.category,
-                        primaryPollutant = air.primaryPollutant,
-                    )
+                    AirQualityCard(air = air)
                 }
             }
 

@@ -24,10 +24,12 @@ import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.yuzheng.kairoweather.R
+import com.yuzheng.kairoweather.domain.model.AirQuality
+import com.yuzheng.kairoweather.domain.model.healthAdviceLines
 import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
 
 /**
- * 空气质量卡:标题 → 大数值 → 说明 → 刻度条 四层信息结构。
+ * 空气质量卡:标题 → 大数值 → 说明 → 刻度条 → 健康建议 五层信息结构。
  *
  * 设计约定(与 [WindCard]/[HumidityCard] 等一致):组件只接收"已解析好的原始值",
  * 不做网络、不做字符串转数字——AQI 的 DTO→domain 解析发生在 mapper 边界,
@@ -35,11 +37,11 @@ import com.yuzheng.kairoweather.ui.theme.KairoWeatherTheme
  */
 @Composable
 fun AirQualityCard(
-    aqi: Int,
-    category: String,
-    primaryPollutant: String,
+    air: AirQuality,
     modifier: Modifier = Modifier
 ) {
+    val aqi = air.aqi
+    val healthLines = air.healthAdviceLines()
     Card(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
@@ -60,19 +62,20 @@ fun AirQualityCard(
             // ② 主数值:大字号 + 按污染等级着色。颜色是这张卡的"状态语义",
             // 一眼扫过去不用读文字就知道空气好坏
             Text(
-                text = "$aqi · $category",
+                text = "$aqi · ${air.category}",
                 style = MaterialTheme.typography.headlineSmall,
                 color = aqiStatusColor(aqi),
             )
             Spacer(Modifier.height(dimensionResource(R.dimen.card_value_spacing)))
 
-            // ③ 说明:回到次要色,给"数值→结论"补一句依据
+            // ③ 说明:回到次要色,给"数值→结论"补一句依据。API 给了健康影响
+            // (effect)时以它优先——"空气质量令人满意"比"当前 AQI 为 33"信息量大,
+            // 首要污染物并进括号兜底(优级下 API 常无首要污染物)
+            val pollutantSuffix = air.primaryPollutant
+                .takeIf { it.isNotBlank() && it != "-" }
+                ?.let { ",首要污染物 $it" } ?: ""
             Text(
-                text = if (primaryPollutant.isBlank() || primaryPollutant == "-") {
-                    "当前 AQI(CN) 为 $aqi"
-                } else {
-                    "当前 AQI(CN) 为 $aqi,首要污染物 $primaryPollutant"
-                },
+                text = air.healthEffect.ifBlank { "当前 AQI(CN) 为 $aqi$pollutantSuffix" },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -80,6 +83,20 @@ fun AirQualityCard(
 
             // ④ 可视化:整卡唯一需要"画"的部分,见 AqiScaleBar
             AqiScaleBar(aqi)
+
+            // ⑤ 健康建议:来自 API 的分人群指引。整段可缺席(字段可能为空),
+            // 出现时轻分隔 + 小字,视觉权重最低——数值和颜色仍是主角
+            if (healthLines.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                healthLines.forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -153,7 +170,15 @@ private val AqiColorStops = arrayOf(
 @Composable
 private fun AirQualityCardGoodPreview() {
     KairoWeatherTheme {
-        AirQualityCard(aqi = 23, category = "优", primaryPollutant = "pm10", modifier = Modifier.padding(16.dp))
+        AirQualityCard(
+            air = AirQuality(
+                aqi = 23, category = "优", primaryPollutant = "pm10",
+                healthEffect = "空气质量令人满意，基本无空气污染。",
+                adviceGeneral = "各类人群可正常活动。",
+                adviceSensitive = "各类人群可正常活动。",
+            ),
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }
 
@@ -161,7 +186,15 @@ private fun AirQualityCardGoodPreview() {
 @Composable
 private fun AirQualityCardMidPreview() {
     KairoWeatherTheme {
-        AirQualityCard(aqi = 168, category = "中度污染", primaryPollutant = "o3", modifier = Modifier.padding(16.dp))
+        AirQualityCard(
+            air = AirQuality(
+                aqi = 168, category = "中度污染", primaryPollutant = "o3",
+                healthEffect = "进一步加剧易感人群症状，可能对健康人群心脏、呼吸系统有影响。",
+                adviceGeneral = "一般人群适量减少户外运动。",
+                adviceSensitive = "儿童、老年人及心脏病、呼吸系统疾病患者避免长时间、高强度的户外锻炼。",
+            ),
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }
 
@@ -169,6 +202,11 @@ private fun AirQualityCardMidPreview() {
 @Composable
 private fun AirQualityCardDarkPreview() {
     KairoWeatherTheme {
-        AirQualityCard(aqi = 320, category = "严重污染", primaryPollutant = "pm2.5", modifier = Modifier.padding(16.dp))
+        AirQualityCard(
+            air = AirQuality(
+                aqi = 320, category = "严重污染", primaryPollutant = "pm2.5",
+            ),
+            modifier = Modifier.padding(16.dp),
+        )
     }
 }

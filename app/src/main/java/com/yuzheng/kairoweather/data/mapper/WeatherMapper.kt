@@ -54,6 +54,9 @@ fun AirQualityResponse.toDomain(): AirQuality? {
         aqi = value.coerceIn(0, 500),
         category = index.category.ifBlank { categoryForAqi(value) },
         primaryPollutant = index.primaryPollutant?.name ?: "",
+        healthEffect = index.health?.effect ?: "",
+        adviceGeneral = index.health?.advice?.generalPopulation ?: "",
+        adviceSensitive = index.health?.advice?.sensitivePopulation ?: "",
     )
 }
 

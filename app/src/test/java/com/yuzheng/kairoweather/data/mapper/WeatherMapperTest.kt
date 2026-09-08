@@ -1,18 +1,23 @@
 package com.yuzheng.kairoweather.data.mapper
 
+import com.yuzheng.kairoweather.data.model.AirHealth
+import com.yuzheng.kairoweather.data.model.AirHealthAdvice
 import com.yuzheng.kairoweather.data.model.AirIndex
 import com.yuzheng.kairoweather.data.model.AirPollutantRef
 import com.yuzheng.kairoweather.data.model.AirQualityResponse
 import com.yuzheng.kairoweather.data.model.QWeatherDaily
 import com.yuzheng.kairoweather.data.model.QWeatherHourly
 import com.yuzheng.kairoweather.data.model.QWeatherNow
+import com.yuzheng.kairoweather.domain.model.AirQuality
 import com.yuzheng.kairoweather.domain.model.MoonPhase
 import com.yuzheng.kairoweather.domain.model.TemperatureUnit
+import com.yuzheng.kairoweather.domain.model.healthAdviceLines
 import com.yuzheng.kairoweather.domain.model.toFeelLikeString
 import com.yuzheng.kairoweather.domain.model.toPercentString
 import com.yuzheng.kairoweather.domain.model.toTempString
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WeatherMapperTest {
@@ -280,6 +285,13 @@ class WeatherMapperTest {
                 AirIndex(
                     code = "cn-mee", aqi = 33.0, category = "优",
                     primaryPollutant = AirPollutantRef(name = "PM10"),
+                    health = AirHealth(
+                        effect = "空气质量令人满意，基本无空气污染。",
+                        advice = AirHealthAdvice(
+                            generalPopulation = "各类人群可正常活动。",
+                            sensitivePopulation = "各类人群可正常活动。",
+                        ),
+                    ),
                 ),
             ),
         )
@@ -289,6 +301,47 @@ class WeatherMapperTest {
         assertEquals(33, domain.aqi)
         assertEquals("优", domain.category)
         assertEquals("PM10", domain.primaryPollutant)
+        assertEquals("空气质量令人满意，基本无空气污染。", domain.healthEffect)
+        assertEquals("各类人群可正常活动。", domain.adviceGeneral)
+        assertEquals("各类人群可正常活动。", domain.adviceSensitive)
+    }
+
+    @Test
+    fun `air toDomain tolerates absent health fields`() {
+        // 官方文档:health 及子字段都可能为 null/显式 null——一律归 "",UI 整段缺席
+        val dto = AirQualityResponse(
+            indexes = listOf(AirIndex(code = "cn-mee", aqi = 60.0, category = "良")),
+        )
+
+        val domain = dto.toDomain()!!
+
+        assertEquals("", domain.healthEffect)
+        assertEquals(emptyList<String>(), domain.healthAdviceLines())
+    }
+
+    // ── 健康建议文案行(分人群合并/分行/缺席) ──
+
+    @Test
+    fun `healthAdviceLines merges identical advice for both populations`() {
+        val air = AirQuality(
+            aqi = 23, category = "优", primaryPollutant = "",
+            adviceGeneral = "各类人群可正常活动。",
+            adviceSensitive = "各类人群可正常活动。",
+        )
+        assertEquals(listOf("各类人群可正常活动。"), air.healthAdviceLines())
+    }
+
+    @Test
+    fun `healthAdviceLines appends sensitive label when advice differs`() {
+        val air = AirQuality(
+            aqi = 168, category = "中度污染", primaryPollutant = "o3",
+            adviceGeneral = "一般人群适量减少户外运动。",
+            adviceSensitive = "儿童、老年人及心脏病、呼吸系统疾病患者避免长时间、高强度的户外锻炼。",
+        )
+        assertEquals(2, air.healthAdviceLines().size)
+        // 官方一般人群文案自带主语,不加前缀;敏感人群是"点名式",补前缀归类
+        assertEquals("一般人群适量减少户外运动。", air.healthAdviceLines()[0])
+        assertTrue(air.healthAdviceLines()[1].startsWith("敏感人群:"))
     }
 
     @Test
