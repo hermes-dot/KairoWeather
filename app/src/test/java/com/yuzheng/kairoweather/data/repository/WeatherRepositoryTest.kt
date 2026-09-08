@@ -1,5 +1,7 @@
 package com.yuzheng.kairoweather.data.repository
 
+import com.yuzheng.kairoweather.data.model.AirIndex
+import com.yuzheng.kairoweather.data.model.AirQualityResponse
 import com.yuzheng.kairoweather.data.model.GeoLocation
 import com.yuzheng.kairoweather.data.model.GeoResponse
 import com.yuzheng.kairoweather.data.model.QWeatherDaily
@@ -174,5 +176,29 @@ class WeatherRepositoryTest {
         repository.reverseGeocode("1,2")
 
         coVerify(exactly = 2) { api.reverseGeocode("1,2") }
+    }
+
+    // ── 空气质量(新版端点:路径参数、纬度在前) ──
+
+    @Test
+    fun `getAirQuality swaps lon-lat order to lat-slash-lon path`() = runTest {
+        coEvery { api.getAirNow("39.92", "116.41") } returns AirQualityResponse(
+            listOf(AirIndex(code = "cn-mee", aqi = 42.0, category = "优")),
+        )
+
+        val result = repository.getAirQuality("116.41,39.92")
+
+        assertEquals(42, result.getOrThrow().aqi)
+        coVerify(exactly = 1) { api.getAirNow("39.92", "116.41") }
+    }
+
+    @Test
+    fun `getAirQuality maps missing cn-mee index to EmptyDataError`() = runTest {
+        coEvery { api.getAirNow(any(), any()) } returns AirQualityResponse(
+            listOf(AirIndex(code = "qaqi", aqi = 0.9)),
+        )
+
+        val failure = repository.getAirQuality("116.41,39.92").exceptionOrNull()
+        assertTrue(failure is WeatherException.EmptyDataError)
     }
 }

@@ -1,5 +1,8 @@
 package com.yuzheng.kairoweather.data.mapper
 
+import com.yuzheng.kairoweather.data.model.AirIndex
+import com.yuzheng.kairoweather.data.model.AirPollutantRef
+import com.yuzheng.kairoweather.data.model.AirQualityResponse
 import com.yuzheng.kairoweather.data.model.QWeatherDaily
 import com.yuzheng.kairoweather.data.model.QWeatherHourly
 import com.yuzheng.kairoweather.data.model.QWeatherNow
@@ -265,5 +268,43 @@ class WeatherMapperTest {
         assertEquals("2026-00-10", formatFxDate("2026-00-10"))
         assertEquals("abcd-ef-gh", formatFxDate("abcd-ef-gh"))
         assertEquals("2026-08-01-extra", formatFxDate("2026-08-01-extra"))
+    }
+
+    // ── 空气质量(新版多标准索引响应) ──
+
+    @Test
+    fun `air toDomain picks cn-mee index among multiple standards`() {
+        val dto = AirQualityResponse(
+            indexes = listOf(
+                AirIndex(code = "us-epa", aqi = 46.0, category = "Good"),
+                AirIndex(
+                    code = "cn-mee", aqi = 33.0, category = "优",
+                    primaryPollutant = AirPollutantRef(name = "PM10"),
+                ),
+            ),
+        )
+
+        val domain = dto.toDomain()!!
+
+        assertEquals(33, domain.aqi)
+        assertEquals("优", domain.category)
+        assertEquals("PM10", domain.primaryPollutant)
+    }
+
+    @Test
+    fun `air toDomain fills category from国标 when API leaves it blank`() {
+        val dto = AirQualityResponse(
+            indexes = listOf(AirIndex(code = "cn-mee", aqi = 120.0, category = "")),
+        )
+
+        assertEquals("轻度污染", dto.toDomain()!!.category)
+    }
+
+    @Test
+    fun `air toDomain returns null without cn-mee index or without numeric value`() {
+        // 只有和风通用 qaqi:卡面写 AQI(CN),拿别的标准凑数=语义错误,宁缺毋假
+        assertEquals(null, AirQualityResponse(listOf(AirIndex(code = "qaqi", aqi = 0.9))).toDomain())
+        assertEquals(null, AirQualityResponse(emptyList()).toDomain())
+        assertEquals(null, AirQualityResponse(listOf(AirIndex(code = "cn-mee", aqi = null))).toDomain())
     }
 }

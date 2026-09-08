@@ -55,11 +55,15 @@ class WeatherRepository @Inject constructor(private val api: WeatherApiService) 
     suspend fun getAirQuality(location: String, forceRefresh: Boolean = false): Result<AirQuality> =
         cached("$location|air", forceRefresh) {
             resultCatching {
-                val response = api.getAirNow(location)
-                if (response.code != "200") throw WeatherException.ApiError(response.code)
-                val now = response.now ?: throw WeatherException.EmptyDataError()
-                // toDomain 只在 aqi 非数字时返回 null:按"无数据"处理,不谎报 0(优)
-                now.toDomain() ?: throw WeatherException.EmptyDataError()
+                // 新版端点是路径参数且"纬度/经度"顺序与内部 "lon,lat" 相反。
+                // 响应没有旧版 code 字段:非 2xx 时 Retrofit 直接抛异常,由
+                // resultCatching 归入 failure——不再手写 code != "200" 判定。
+                val (lon, lat) = location.split(",").let {
+                    it.getOrElse(0) { "" } to it.getOrElse(1) { "" }
+                }
+                val response = api.getAirNow(lat, lon)
+                // toDomain 返回 null = 无 cn-mee 索引或数值非法:按"无数据"处理,不谎报 0(优)
+                response.toDomain() ?: throw WeatherException.EmptyDataError()
             }
         }
 

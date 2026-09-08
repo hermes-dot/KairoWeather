@@ -1,9 +1,9 @@
 package com.yuzheng.kairoweather.data.mapper
 
+import com.yuzheng.kairoweather.data.model.AirQualityResponse
 import com.yuzheng.kairoweather.data.model.QWeatherNow
 import com.yuzheng.kairoweather.data.model.QWeatherHourly
 import com.yuzheng.kairoweather.data.model.QWeatherDaily
-import com.yuzheng.kairoweather.data.model.QWeatherAirNow
 import com.yuzheng.kairoweather.domain.model.AirQuality
 import com.yuzheng.kairoweather.domain.model.categoryForAqi
 import com.yuzheng.kairoweather.domain.model.CurrentWeather
@@ -41,17 +41,23 @@ fun QWeatherHourly.toDomain(): HourlyForecast {
 }
 
 /**
- * 空气质量 DTO → domain。aqi 非数字时按"无数据"处理返回 null,由 Repository 转成
- * EmptyDataError——不猜 0,因为 0 在 AQI 语义里是"最优",谎报比缺失更糟。
+ * 空气质量 DTO → domain。新版响应是多标准索引数组,取中国国标 cn-mee(卡面文案
+ * 明确写"AQI(CN)",换标准等于换语义,不做配置项)。
+ *
+ * 索引缺失或 aqi 非数字时返回 null,由 Repository 转成 EmptyDataError——
+ * 不猜 0,因为 0 在 AQI 语义里是"最优",谎报比缺失更糟。
  */
-fun QWeatherAirNow.toDomain(): AirQuality? {
-    val value = aqi.toIntOrNull() ?: return null
+fun AirQualityResponse.toDomain(): AirQuality? {
+    val index = indexes.firstOrNull { it.code == CN_MEE_INDEX } ?: return null
+    val value = index.aqi?.toInt() ?: return null
     return AirQuality(
         aqi = value.coerceIn(0, 500),
-        category = category.ifBlank { categoryForAqi(value) },
-        primaryPollutant = primary,
+        category = index.category.ifBlank { categoryForAqi(value) },
+        primaryPollutant = index.primaryPollutant?.name ?: "",
     )
 }
+
+private const val CN_MEE_INDEX = "cn-mee"
 
 fun QWeatherDaily.toDomain(index: Int): DailyForecast = DailyForecast(
     date = if (index == 0) "今天" else formatFxDate(fxDate),
