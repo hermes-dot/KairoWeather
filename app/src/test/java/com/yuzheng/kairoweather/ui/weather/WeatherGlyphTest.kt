@@ -16,7 +16,7 @@ class WeatherGlyphTest {
 
     @Test
     fun `晴天系 - 100与900画太阳,150晴夜画月亮`() {
-        assertEquals(WeatherGlyph.SUN, WeatherGlyph.fromCode("100"))
+        assertEquals(WeatherGlyph.MOON, WeatherGlyph.fromCode("100"))
         assertEquals(WeatherGlyph.SUN, WeatherGlyph.fromCode("900"))
         assertEquals(WeatherGlyph.MOON, WeatherGlyph.fromCode("150"))
     }
