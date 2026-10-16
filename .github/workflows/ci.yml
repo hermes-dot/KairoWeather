@@ -55,29 +55,6 @@ jobs:
       - name: 给 gradlew 加可执行位
         run: chmod +x ./gradlew
 
-      # ④.9 【临时诊断，定位完就删】插件仓库到底被请求成了什么
-      - name: 诊断插件仓库可达性
-        run: |
-          set +e
-          set +o pipefail
-          echo "=== proxy 环境变量 ==="; env | grep -i proxy || echo "(无)"
-          P=com/google/devtools/ksp/com.google.devtools.ksp.gradle.plugin/2.2.10-2.0.2/com.google.devtools.ksp.gradle.plugin-2.2.10-2.0.2.pom
-          echo "=== 各源对该 marker 的 HTTP 状态码 ==="
-          for base in \
-            https://mirrors.cloud.tencent.com/nexus/repository/google-maven \
-            https://maven.aliyun.com/repository/public \
-            https://maven.aliyun.com/repository/gradle-plugin \
-            https://dl.google.com/dl/android/maven2 \
-            https://repo.maven.apache.org/maven2 \
-            https://plugins.gradle.org/m2 ; do
-            code=$(curl -s -o /dev/null -w '%{http_code} time=%{time_total}s' --max-time 20 -L "$base/$P")
-            printf '%s  %s\n' "$code" "$base"
-          done
-          echo "=== gradle --info：真实发出的仓库请求 ==="
-          ./gradlew help --info 2>&1 | grep -iE 'Resource missing|Could not GET|Received status|Downloading|ksp|Connect|timed out|No cached version' | head -80
-          echo "=== gradle 版本 ==="
-          ./gradlew --version 2>&1 | head -12
-
       # ⑤ 跑测试——与本地命令行敲的是同一条命令，这就是 CI 的全部秘密
       - name: 跑 JVM 单元测试
         run: ./gradlew testDebugUnitTest --stacktrace
