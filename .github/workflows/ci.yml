@@ -1,0 +1,70 @@
+name: CI
+
+# 触发：任何分支的 push 与 PR
+# 暂时不加 branches 过滤——第一次跑通之前，最大的坑是"分支名写错导致压根没触发"。
+# 跑通后再收窄成 branches: [ main, dev ]。
+on:
+  push:
+  pull_request:
+
+# 同一分支连续提交时取消上一次还在跑的，省 GitHub 免费额度（2000 分钟/月）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-test:
+    name: JVM 单元测试
+    runs-on: ubuntu-latest
+
+    steps:
+      # ① 拉代码
+      - uses: actions/checkout@v5
+
+      # ② JDK 21——不是随便选的：
+      #    本项目 AGP 9.1.1 + Gradle 9.3.1，Android Studio 自带的 JBR 也是 21。
+      #    本机 PATH 里的 JDK 17 跑不动这个项目（会报 "requires Java 21"）。
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle          # 缓存依赖 + Gradle 发行包；第二次跑会明显变快
+
+      # ③ Android SDK：runner 预装了 SDK，但本项目的 compileSdk = 37（minor 1）很新，
+      #    可能缺。setup-android 负责装 cmdline-tools 并接受 license，
+      #    之后 AGP 会自动补齐缺失的 platform。
+      - uses: android-actions/setup-android@v4
+
+      # ④ 补上被 .gitignore 排除的 qweather.properties
+      #    单测用 MockK 打桩、不发真实请求，所以占位值就够——绝不放真 key。
+      #    （条目 ⑤ 的 BuildConfig 会读它；缺文件时 key 为空串，
+      #      NetworkModule 里的 ifEmpty { error(...) } 会让部分用例挂掉。
+      #      这是 CI 与本地最大的环境差异，也是第一次跑最常见的失败原因。）
+      - name: 生成 CI 环境配置
+        run: |
+          echo "apiKey=ci-dummy-key" > qweather.properties
+          echo "baseUrl=https://devapi.qweather.com/" >> qweather.properties
+
+      # ④.5 修 gradlew 的可执行位。
+      #     真实原因：本仓库是在 Windows 上提交的，git 索引里 gradlew 的模式是 100644
+      #     （Windows 的 git 默认 core.fileMode=false，不会记录 +x），
+      #     而 Linux runner 上 `./gradlew` 会直接报 "Permission denied"（exit 126）——
+      #     表现是日志第一行就挂，很容易误判成"脚本本身有问题"。
+      #     根治办法：本地执行 `git update-index --chmod=+x gradlew` 并一并提交（改索引里的模式位）。
+      #     这一行是兜底：无论索引模式如何，CI 都能跑起来。
+      - name: 给 gradlew 加可执行位
+        run: chmod +x ./gradlew
+
+      # ⑤ 跑测试——与本地命令行敲的是同一条命令，这就是 CI 的全部秘密
+      - name: 跑 JVM 单元测试
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      # ⑥ 无论成败都归档报告——失败时才是唯一需要看报告的时刻。
+      #    若只在成功时归档，你需要它的时候反而什么都看不到。
+      - name: 归档测试报告
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: unit-test-report
+          path: app/build/reports/tests/
+          if-no-files-found: warn

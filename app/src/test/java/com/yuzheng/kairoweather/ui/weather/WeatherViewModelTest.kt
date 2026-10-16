@@ -57,9 +57,19 @@ class WeatherViewModelTest {
         pressureHpa = 1013,
     )
 
+    // rawTime 决定 isNow 的判定（见 WeatherViewModel.isCurrentHour）：给固定的历史时区时间戳，
+    // isNow 在任何时刻都确定性地为 false，同时仍走"带时区偏移"的主路径而不是兜底分支。
+    // 历史坑：这里原本是 rawTime 缺省（空串）+ time = "12:00"，会退回"设备时区比小时"的兜底分支，
+    // 于是每天 12:00–12:59 跑必红、其余 23 小时全绿——CI 上表现为"看推送时间随机变红"。
     private val hourly = listOf(
-        HourlyForecast(time = "12:00", tempCelsius = 24.0, iconCode = "100", popPct = 10, isNow = false),
-        HourlyForecast(time = "13:00", tempCelsius = 25.0, iconCode = "100", popPct = 20, isNow = false),
+        HourlyForecast(
+            time = "12:00", tempCelsius = 24.0, iconCode = "100", popPct = 10, isNow = false,
+            rawTime = "2020-01-01T12:00+08:00",
+        ),
+        HourlyForecast(
+            time = "13:00", tempCelsius = 25.0, iconCode = "100", popPct = 20, isNow = false,
+            rawTime = "2020-01-01T13:00+08:00",
+        ),
     )
 
     private val daily = listOf(
